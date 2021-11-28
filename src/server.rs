@@ -10,7 +10,7 @@ use crate::{
 	Result,
 };
 use serde::{Deserialize, Serialize};
-use std::net::{TcpListener, TcpStream, ToSocketAddrs};
+use std::{net::{TcpListener, TcpStream, ToSocketAddrs}, time::Duration};
 use std::{
 	fmt::{self, Debug},
 	io::{Read, Write},
@@ -56,7 +56,7 @@ pub fn run<A: ToSocketAddrs>(address: A, gamedata: GameData) -> Result<()> {
 
 /// Handle client connected to server.
 fn handle_client(mut stream: TcpStream, mut gamedata: GameData) -> Result<()> {
-	loop {
+	'a: loop {
 		let mut buffer = [0; 1024];
 		stream.read(&mut buffer)?;
 		if String::from_utf8(buffer.to_vec())
@@ -87,6 +87,7 @@ fn handle_client(mut stream: TcpStream, mut gamedata: GameData) -> Result<()> {
 						Err(_) => Response::new(request.clone(), snake.map(|_| ())),
 					}
 				}
+				RequestKind::GetGameData => Response::new(request.clone(), Ok(())),
 				RequestKind::Disconnect => Response::new(
 					request.clone(),
 					gamedata.kill_snake(request.client).map(|_| ()),
@@ -95,10 +96,11 @@ fn handle_client(mut stream: TcpStream, mut gamedata: GameData) -> Result<()> {
 
 			println!("{}", response);
 
+			thread::sleep(Duration::from_millis(300));
 			gamedata.update_grid();
 
 			if let RequestKind::Disconnect = request.kind {
-				break;
+				break 'a;
 			}
 		}
 
@@ -124,6 +126,8 @@ pub enum RequestKind {
 	Connect,
 	/// Request to disconnect from server.
 	Disconnect,
+	/// Request to get game data.
+	GetGameData,
 	/// Request to change snake direction on the provided one.
 	ChangeDirection(Direction),
 }
@@ -133,6 +137,7 @@ impl fmt::Display for RequestKind {
 		match self {
 			Self::Connect => write!(f, "connect to the server"),
 			Self::Disconnect => write!(f, "disconnect from the server"),
+			Self::GetGameData => write!(f, "get game data"),
 			Self::ChangeDirection(direction) => {
 				write!(f, "change snake direction to {}", direction)
 			}

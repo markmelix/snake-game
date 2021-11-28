@@ -27,7 +27,6 @@ impl GameData {
 	/// Recommended maximum number of apples in the game.
 	pub const RECOMMENDED_APPLES_AMOUNT: usize = 5;
 
-
 	/// Default snake step. Should be changed only with purposes of fun.
 	const SNAKE_STEP: i32 = 1;
 
@@ -63,7 +62,8 @@ impl GameData {
 		for snake in &mut self.snakes {
 			snake.move_parts(Self::SNAKE_STEP);
 			for snake_part in &mut snake.parts {
-				grid.data.push(GridPoint::new(snake_part.coords(), snake_part.color()));
+				grid.data
+					.push(GridPoint::new(snake_part.coords(), snake_part.color()));
 			}
 		}
 		for apple in &self.apples {
@@ -153,8 +153,8 @@ impl Snake {
 				let mut v = vec![];
 				for i in 0..initial_length {
 					v.push(SnakePart::new(
-						Coordinates::new(0, i),
-						Color::BLACK,
+						Coordinates::new(0, i as i32),
+						Color::GREEN,
 						Direction::Right,
 					));
 				}
@@ -171,20 +171,20 @@ impl Snake {
 	/// part direction.
 	fn move_parts(&mut self, step: i32) {
 		let parts = &mut self.parts;
-		parts.reverse();
-		for i in 0..parts.len() {
-			let part = &mut parts[i].clone();
-			match parts.get_mut(i + 1) {
-				Some(next_part) => match part.direction {
-					Direction::Up => next_part.mv((0, step)),
-					Direction::Down => next_part.mv((0, -step)),
-					Direction::Left => next_part.mv((-step, 0)),
-					Direction::Right => next_part.mv((step, 0)),
-				},
-				None => break,
-			};
-		}
-		parts.reverse();
+		//parts.reverse();
+		// for i in parts.len()..0 {
+		//	let part = &mut parts[i].clone();
+		//	match parts.get_mut(i + 1) {
+		//		Some(next_part) => match part.direction {
+		//			Direction::Up => next_part.mv((0, step)),
+		//			Direction::Down => next_part.mv((0, -step)),
+		//			Direction::Left => next_part.mv((-step, 0)),
+		//			Direction::Right => next_part.mv((step, 0)),
+		//		},
+		//		None => break,
+		//	};
+		// }
+		//parts.reverse();
 		self.parts = parts.clone();
 	}
 
@@ -277,8 +277,8 @@ impl SnakePart {
 	/// ```
 	fn mv(&mut self, coordinates: (i32, i32)) {
 		self.coordinates = Coordinates::new(
-			(self.coordinates.x as i32 + coordinates.0) as u32,
-			(self.coordinates.y as i32 + coordinates.1) as u32,
+			self.coordinates.x + coordinates.0,
+			self.coordinates.y + coordinates.1,
 		)
 	}
 
@@ -327,20 +327,20 @@ impl Apple {
 /// Coordinates abstraction.
 pub struct Coordinates {
 	/// Coordinate relative to the abscissa axis.
-	pub x: u32,
+	pub x: i32,
 
 	/// Coordinate relative to the ordinate axis.
-	pub y: u32,
+	pub y: i32,
 }
 
 impl Coordinates {
 	/// Return a new [`Coordinates`].
-	pub fn new(x: u32, y: u32) -> Self {
+	pub fn new(x: i32, y: i32) -> Self {
 		Self { x, y }
 	}
 
 	/// Convert [`Coordinates`] to array with two u32 elements.
-	pub fn to_u32(self) -> [u32; 2] {
+	pub fn to_u32(self) -> [i32; 2] {
 		[self.x, self.y]
 	}
 
@@ -350,8 +350,8 @@ impl Coordinates {
 	}
 }
 
-impl From<(u32, u32)> for Coordinates {
-	fn from(t: (u32, u32)) -> Self {
+impl From<(i32, i32)> for Coordinates {
+	fn from(t: (i32, i32)) -> Self {
 		Self::new(t.0, t.1)
 	}
 }
@@ -414,6 +414,14 @@ impl Color {
 		r: 1.0,
 		g: 1.0,
 		b: 1.0,
+		a: 1.0,
+	};
+
+	/// The green color.
+	pub const GREEN: Color = Color {
+		r: 0.0,
+		g: 1.0,
+		b: 0.0,
 		a: 1.0,
 	};
 

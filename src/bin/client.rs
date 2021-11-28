@@ -3,9 +3,10 @@
 
 use clap::{App, Arg};
 use eframe::{
-	egui::{self, epaint},
+	egui::{self, epaint, pos2, vec2, Vec2},
 	epi,
 };
+use rand::Rng;
 use snake_game::{
 	game::{GameData, Grid},
 	server,
@@ -61,9 +62,6 @@ pub struct Client {
 
 	/// Game grid which updates using GameData update_grid method.
 	grid: Option<Grid>,
-
-	/// Redraw counter.
-	redraws: u32,
 }
 
 impl Client {
@@ -77,7 +75,6 @@ where {
 			connection_status: String::new(),
 			stream: None,
 			grid: None,
-			redraws: 0,
 		}
 	}
 
@@ -86,13 +83,12 @@ where {
 	fn request_grid(&mut self) -> Grid {
 		let mut buffer = [0; 1024 * 10];
 
-		self.stream
-			.as_ref()
-			.unwrap()
-			.try_clone()
-			.unwrap()
-			.read(&mut buffer)
-			.expect("reading stream buffer");
+		let mut stream = self.stream.as_ref().unwrap().try_clone().unwrap();
+
+		server::Request::new(self.name.clone().unwrap(), server::RequestKind::GetGameData)
+			.write(&mut stream)
+			.unwrap();
+		stream.read(&mut buffer).expect("reading stream buffer");
 
 		let string = String::from_utf8_lossy(&buffer);
 
@@ -146,46 +142,39 @@ impl epi::App for Client {
 				ui.label(self.connection_status.clone());
 			});
 		} else if self.stream.is_some() {
-			if self.redraws == 0 {
-				self.grid = Some(self.request_grid());
-			}
+			self.grid = Some(self.request_grid());
 			egui::CentralPanel::default().show(ctx, |ui| {
 				let grid = self.grid.clone().unwrap();
-				let painter = egui::Painter::new(
-					ui.ctx().clone(),
-					ui.layer_id(),
-					ui.available_rect_before_wrap(),
-				);
-				let mut shapes: Vec<egui::Shape> = Vec::new();
 				for point in grid.data {
-					println!("DP: {:?}", point);
-					shapes.push(egui::Shape::Rect(epaint::RectShape::filled(
-						epaint::Rect {
-							min: egui::pos2(point.coordinates.x as f32 * 10.0, point.coordinates.y as f32 * 50.0),
-							max: egui::pos2(point.coordinates.x as f32 * 10.0, point.coordinates.y as f32 * 50.0),
+					let color = color32(point.color);
+					let image =
+						egui::Image::new(egui::TextureId::User(u64::MAX), vec2(100.0, 100.0))
+							.bg_fill(color)
+							.tint(color);
+					image.paint_at(
+						ui,
+						egui::Rect {
+							min: pos2(point.coordinates.x as f32, point.coordinates.y as f32),
+							max: pos2(
+								(point.coordinates.x + 1) as f32 * 5.0,
+								(point.coordinates.y - 1) as f32 * 5.0,
+							),
 						},
-						0.0,
-						color32(point.color),
-					)));
+					);
 				}
-				painter.extend(shapes);
-				self.redraws += 1;
 			});
+			ctx.request_repaint();
 		} else {
 			self.connect = false;
-		}
-
-		if self.redraws > 60 * 2 {
-			self.redraws = 0;
 		}
 	}
 }
 
 fn color32(color: snake_game::game::Color) -> egui::Color32 {
-	egui::Color32::from_rgba_premultiplied(
+	egui::Color32::from_rgb(
 		color.r as u8,
 		color.g as u8,
 		color.b as u8,
-		color.a as u8,
+		//color.a as u8,
 	)
 }
