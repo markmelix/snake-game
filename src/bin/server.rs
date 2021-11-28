@@ -3,8 +3,7 @@ const DEFAULT_PORT: &str = "8787";
 use clap::{App, Arg};
 use snake_game::{game::GameData, server};
 
-#[tokio::main]
-async fn main() {
+fn main() {
 	let matches = App::new("Snake Game by Mark")
 		.about("Lets start own multiplayer server")
 		.arg(
@@ -66,9 +65,7 @@ async fn main() {
 	if let Err(e) = server::run(
 		format!("localhost:{}", port),
 		GameData::new(grid_size, Some(snakes), Some(apples)),
-	)
-	.await
-	{
+	) {
 		eprintln!("Error while running the server: {}", e);
 		return;
 	}

@@ -10,95 +10,97 @@ use crate::{
 	Result,
 };
 use serde::{Deserialize, Serialize};
-use std::{fmt::{self, Debug}, process};
-use tokio::{
-	io::{AsyncReadExt, AsyncWriteExt},
-	net::{TcpListener, TcpStream, ToSocketAddrs},
+use std::net::{TcpListener, TcpStream, ToSocketAddrs};
+use std::{
+	fmt::{self, Debug},
+	io::{Read, Write},
+	thread,
 };
 
 /// Connect to the server with specified address. `client` is a name of the
 /// snake.
-pub async fn connect<A: ToSocketAddrs + Debug>(address: A, client: impl Into<String>) -> TcpStream {
-	match TcpStream::connect(&address).await {
+pub fn connect<A: ToSocketAddrs + Debug>(
+	address: A,
+	client: impl Into<String>,
+) -> Result<TcpStream> {
+	match TcpStream::connect(&address) {
 		Ok(mut stream) => {
 			Request::new(client.into(), RequestKind::Connect)
 				.write(&mut stream)
-				.await
 				.expect("writing to the server stream");
-			stream
+			Ok(stream)
 		}
-		Err(e) => {
-			eprintln!(
-				"Error while connecting to the server with address {:?}: \"{}\"",
-				address, e
-			);
-			process::exit(-1);
-		}
+		Err(e) => Err(Box::new(e)),
 	}
 }
 
 /// Run server with specified address and [`GameData`].
-pub async fn run<A: ToSocketAddrs>(address: A, gamedata: GameData) -> Result<()> {
-	let listener = TcpListener::bind(address).await?;
+pub fn run<A: ToSocketAddrs>(address: A, gamedata: GameData) -> Result<()> {
+	let listener = TcpListener::bind(address)?;
 
 	loop {
-		let (socket, address) = match listener.accept().await {
+		let (socket, address) = match listener.accept() {
 			Ok(val) => val,
 			Err(e) => {
 				eprintln!("Failed to accept incoming connection: {}", e);
 				continue;
 			}
 		};
-		match handle_client(socket, gamedata.clone()).await {
+		let gamedata = gamedata.clone();
+		thread::spawn(move || match handle_client(socket, gamedata) {
 			Ok(_) => println!("Successfully handled client {}", address),
 			Err(e) => eprintln!("Failed to handle client \"{}\": {}", address, e),
-		}
+		});
 	}
 }
 
 /// Handle client connected to server.
-async fn handle_client(mut stream: TcpStream, mut gamedata: GameData) -> Result<()> {
+fn handle_client(mut stream: TcpStream, mut gamedata: GameData) -> Result<()> {
 	loop {
 		let mut buffer = [0; 1024];
-		stream.read(&mut buffer).await?;
-		if String::from_utf8(buffer.to_vec()).unwrap().trim_matches(char::from(0)) == "" {
-			continue;
-		}
-
-
-		println!("{:?}", String::from_utf8_lossy(&buffer));
-
-		let request = match Request::from_bytes(&buffer) {
-			Ok(val) => val,
-			Err(e) => {
-				eprintln!("Failed to convert request: {}", e);
-				return Err(e);
-			}
-		};
-
-		let response = match request.clone().kind {
-			RequestKind::Connect => Response::new(
-				request.clone(),
-				gamedata.spawn_snake(&request.clone().client, Direction::Right, 10),
-			),
-			RequestKind::ChangeDirection(direction) => {
-				let snake = gamedata.snake(request.clone().client);
-				match snake {
-					Ok(snake) => {
-						Response::new(request.clone(), snake.change_direction(direction.clone()))
-					}
-					Err(_) => Response::new(request.clone(), snake.map(|_| ())),
+		stream.read(&mut buffer)?;
+		if String::from_utf8(buffer.to_vec())
+			.unwrap()
+			.trim_matches(char::from(0))
+			!= ""
+		{
+			let request = match Request::from_bytes(&buffer) {
+				Ok(val) => val,
+				Err(e) => {
+					eprintln!("Failed to convert request: {}", e);
+					return Err(e);
 				}
+			};
+
+			let response = match request.clone().kind {
+				RequestKind::Connect => Response::new(
+					request.clone(),
+					gamedata.spawn_snake(&request.clone().client, Direction::Right, 10),
+				),
+				RequestKind::ChangeDirection(direction) => {
+					let snake = gamedata.snake(request.clone().client);
+					match snake {
+						Ok(snake) => Response::new(
+							request.clone(),
+							snake.change_direction(direction.clone()),
+						),
+						Err(_) => Response::new(request.clone(), snake.map(|_| ())),
+					}
+				}
+				RequestKind::Disconnect => Response::new(
+					request.clone(),
+					gamedata.kill_snake(request.client).map(|_| ()),
+				),
+			};
+
+			println!("{}", response);
+
+			gamedata.update_grid();
+
+			if let RequestKind::Disconnect = request.kind {
+				break;
 			}
-			RequestKind::Disconnect => Response::new(
-				request.clone(),
-				gamedata.kill_snake(request.client).map(|_| ()),
-			),
-		};
-
-		println!("{}", response);
-
-		gamedata.update_grid();
+		}
 
 		let buffer = match gamedata.as_bytes() {
 			Ok(val) => val,
@@ -108,11 +110,7 @@ async fn handle_client(mut stream: TcpStream, mut gamedata: GameData) -> Result<
 			}
 		};
 
-		stream.write_all(&buffer).await?;
-
-		if let RequestKind::Disconnect = request.kind {
-			break;
-		}
+		stream.write(&buffer)?;
 	}
 
 	Ok(())
@@ -183,8 +181,8 @@ impl Request {
 	/// Send request to server.
 	///
 	/// Write request to [`TcpStream`]
-	pub async fn write(&self, stream: &mut TcpStream) -> Result<()> {
-		stream.write(&self.as_bytes()).await?;
+	pub fn write(&self, stream: &mut TcpStream) -> Result<()> {
+		stream.write(&self.as_bytes())?;
 		Ok(())
 	}
 }

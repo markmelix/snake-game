@@ -39,5 +39,5 @@ fn main() {
 
 	gd.update_grid();
 
-	println!("Recevied GameData:\n{}", serde_json::to_string_pretty(&gd.grid()).unwrap());
+	println!("Recevied GameData:\n{}", serde_json::to_string_pretty(&gd).unwrap());
 }

@@ -4,6 +4,7 @@
 #![warn(missing_docs)]
 //#![warn(missing_doc_code_examples)]
 #![allow(dead_code)]
+#![allow(clippy::unused_io_amount)]
 
 pub mod game;
 pub mod server;

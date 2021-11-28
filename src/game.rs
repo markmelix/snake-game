@@ -45,7 +45,7 @@ impl GameData {
 		apples_max_amount: Option<usize>,
 	) -> Self {
 		Self {
-			grid: Vec::with_capacity(grid_size.0 * grid_size.1),
+			grid: Grid::new(grid_size),
 			snakes: match snakes_max_amount {
 				Some(val) => Vec::with_capacity(val),
 				None => Vec::new(),
@@ -59,15 +59,15 @@ impl GameData {
 
 	/// Refills [`game grid`](Grid) with a new data.
 	pub fn update_grid(&mut self) {
-		let mut grid = vec![];
+		let mut grid = Grid::new(self.grid.size);
 		for snake in &mut self.snakes {
 			snake.move_parts(Self::SNAKE_STEP);
 			for snake_part in &mut snake.parts {
-				grid.push(GridPoint::new(snake_part.coords(), snake_part.color()));
+				grid.data.push(GridPoint::new(snake_part.coords(), snake_part.color()));
 			}
 		}
 		for apple in &self.apples {
-			grid.push(GridPoint::new(
+			grid.data.push(GridPoint::new(
 				apple.coords(),
 				Color::new(1.0, 0.0, 0.0, 0.0),
 			))
@@ -498,8 +498,35 @@ pub mod grid {
 		}
 	}
 
-	/// Game grid. In other words, alias for vector of the [`GridPoint`]s.
-	pub type Grid = Vec<GridPoint>;
+	/// Game grid. In other words, vector of the [`GridPoint`]s.
+	#[derive(Debug, Clone, Serialize, Deserialize)]
+	pub struct Grid {
+		/// [`Grid`] data itself.
+		pub data: Vec<GridPoint>,
+
+		/// [`Grid`] size.
+		pub size: (usize, usize),
+	}
+
+	impl Grid {
+		/// Default size of the grid used with [`Default`](Self::default) trait
+		/// implementation.
+		pub const DEFAULT_SIZE: (usize, usize) = (10, 10);
+
+		/// Return a new [`Grid`].
+		pub fn new(size: (usize, usize)) -> Self {
+			Self {
+				data: Vec::with_capacity(size.0 * size.1),
+				size,
+			}
+		}
+	}
+
+	impl Default for Grid {
+		fn default() -> Self {
+			Self::new(Self::DEFAULT_SIZE)
+		}
+	}
 }
 
 /// Error type returned by [`game`](crate::game) module functions.
