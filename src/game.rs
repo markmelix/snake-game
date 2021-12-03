@@ -592,6 +592,11 @@ use super::*;
 		pub fn as_bytes(&self) -> Result<Vec<u8>> {
 			Ok(serde_json::to_string(self)?.as_bytes().to_vec())
 		}
+
+		/// Convert json string to [`GameData`].
+		pub fn from_string<T: AsRef<str>>(string: T) -> Result<Self> {
+			Ok(serde_json::from_str(string.as_ref())?)
+		}
 	}
 
 	impl Default for Grid {

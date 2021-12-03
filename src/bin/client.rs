@@ -7,7 +7,7 @@ use eframe::{
 	epi,
 };
 use snake_game::{
-	game::{GameData, Grid},
+	game::{self, GameData, Grid},
 	server,
 };
 use std::{io::Read, net::TcpStream};
@@ -91,10 +91,8 @@ where {
 
 		let string = String::from_utf8_lossy(&buffer);
 
-		let gamedata = GameData::from_string(&string.trim_matches(char::from(0)))
-			.expect("parsing json string to get gamedata");
-
-		gamedata.grid()
+		game::Grid::from_string(&string.trim_matches(char::from(0)))
+			.expect("parsing json string to get game grid")
 	}
 }
 
@@ -148,10 +146,7 @@ impl epi::App for Client {
 				for point in grid.data {
 					shapes.push(egui::Shape::Rect(epaint::RectShape::filled(
 						epaint::Rect {
-							min: egui::pos2(
-								point.coordinates.x as f32,
-								point.coordinates.y as f32,
-							),
+							min: egui::pos2(point.coordinates.x as f32, point.coordinates.y as f32),
 							max: egui::pos2(
 								(point.coordinates.x + 1) as f32 * 5.0,
 								(point.coordinates.y - 1) as f32 * 5.0,
