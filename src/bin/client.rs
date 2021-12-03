@@ -3,15 +3,14 @@
 
 use clap::{App, Arg};
 use eframe::{
-	egui::{self, epaint, pos2, vec2, Vec2},
+	egui::{self, epaint},
 	epi,
 };
-use rand::Rng;
 use snake_game::{
 	game::{GameData, Grid},
 	server,
 };
-use std::{io::Read, net::TcpStream, thread, time::Duration};
+use std::{io::Read, net::TcpStream};
 
 fn main() {
 	let matches =
@@ -85,7 +84,7 @@ where {
 
 		let mut stream = self.stream.as_ref().unwrap().try_clone().unwrap();
 
-		server::Request::new(self.name.clone().unwrap(), server::RequestKind::GetGameData)
+		server::Request::new(self.name.clone().unwrap(), server::RequestKind::GetGrid)
 			.write(&mut stream)
 			.unwrap();
 		stream.read(&mut buffer).expect("reading stream buffer");
@@ -143,25 +142,26 @@ impl epi::App for Client {
 			});
 		} else if self.stream.is_some() {
 			self.grid = Some(self.request_grid());
+			let mut shapes: Vec<egui::Shape> = Vec::new();
 			egui::CentralPanel::default().show(ctx, |ui| {
 				let grid = self.grid.clone().unwrap();
 				for point in grid.data {
-					let color = color32(point.color);
-					let image =
-						egui::Image::new(egui::TextureId::User(u64::MAX), vec2(100.0, 100.0))
-							.bg_fill(color)
-							.tint(color);
-					image.paint_at(
-						ui,
-						egui::Rect {
-							min: pos2(point.coordinates.x as f32, point.coordinates.y as f32),
-							max: pos2(
+					shapes.push(egui::Shape::Rect(epaint::RectShape::filled(
+						epaint::Rect {
+							min: egui::pos2(
+								point.coordinates.x as f32,
+								point.coordinates.y as f32,
+							),
+							max: egui::pos2(
 								(point.coordinates.x + 1) as f32 * 5.0,
 								(point.coordinates.y - 1) as f32 * 5.0,
 							),
 						},
-					);
+						10.0,
+						color32(point.color),
+					)));
 				}
+				ui.painter().extend(shapes);
 			});
 			ctx.request_repaint();
 		} else {

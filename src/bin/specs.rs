@@ -34,8 +34,8 @@ fn main() {
 
 	let mut gd = GameData::default();
 
-	gd.spawn_snake("Anton", Direction::Right, 10).unwrap();
-	gd.spawn_snake("Mark", Direction::Left, 10).unwrap();
+	gd.spawn_snake("Anton", gd.grid().random_coords(10), Direction::Right, 10).unwrap();
+	gd.spawn_snake("Mark", gd.grid().random_coords(10), Direction::Left, 10).unwrap();
 
 	gd.update_grid();
 

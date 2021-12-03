@@ -10,11 +10,14 @@ use crate::{
 	Result,
 };
 use serde::{Deserialize, Serialize};
-use std::{net::{TcpListener, TcpStream, ToSocketAddrs}, time::Duration};
 use std::{
 	fmt::{self, Debug},
 	io::{Read, Write},
 	thread,
+};
+use std::{
+	net::{TcpListener, TcpStream, ToSocketAddrs},
+	time::Duration,
 };
 
 /// Connect to the server with specified address. `client` is a name of the
@@ -75,7 +78,12 @@ fn handle_client(mut stream: TcpStream, mut gamedata: GameData) -> Result<()> {
 			let response = match request.clone().kind {
 				RequestKind::Connect => Response::new(
 					request.clone(),
-					gamedata.spawn_snake(&request.clone().client, Direction::Right, 10),
+					gamedata.spawn_snake(
+						&request.clone().client,
+						gamedata.grid().random_coords(10),
+						Direction::Right,
+						10,
+					),
 				),
 				RequestKind::ChangeDirection(direction) => {
 					let snake = gamedata.snake(request.clone().client);
@@ -87,7 +95,7 @@ fn handle_client(mut stream: TcpStream, mut gamedata: GameData) -> Result<()> {
 						Err(_) => Response::new(request.clone(), snake.map(|_| ())),
 					}
 				}
-				RequestKind::GetGameData => Response::new(request.clone(), Ok(())),
+				RequestKind::GetGrid => Response::new(request.clone(), Ok(())),
 				RequestKind::Disconnect => Response::new(
 					request.clone(),
 					gamedata.kill_snake(request.client).map(|_| ()),
@@ -104,7 +112,7 @@ fn handle_client(mut stream: TcpStream, mut gamedata: GameData) -> Result<()> {
 			}
 		}
 
-		let buffer = match gamedata.as_bytes() {
+		let buffer = match gamedata.grid().as_bytes() {
 			Ok(val) => val,
 			Err(e) => {
 				eprintln!("Failed to convert gamedata: {}", e);
@@ -126,8 +134,8 @@ pub enum RequestKind {
 	Connect,
 	/// Request to disconnect from server.
 	Disconnect,
-	/// Request to get game data.
-	GetGameData,
+	/// Request to get game grid.
+	GetGrid,
 	/// Request to change snake direction on the provided one.
 	ChangeDirection(Direction),
 }
@@ -137,7 +145,7 @@ impl fmt::Display for RequestKind {
 		match self {
 			Self::Connect => write!(f, "connect to the server"),
 			Self::Disconnect => write!(f, "disconnect from the server"),
-			Self::GetGameData => write!(f, "get game data"),
+			Self::GetGrid => write!(f, "get game grid"),
 			Self::ChangeDirection(direction) => {
 				write!(f, "change snake direction to {}", direction)
 			}

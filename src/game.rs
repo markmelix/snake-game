@@ -62,12 +62,16 @@ impl GameData {
 		for snake in &mut self.snakes {
 			snake.move_parts(Self::SNAKE_STEP);
 			for snake_part in &mut snake.parts {
-				grid.data
-					.push(GridPoint::new(snake_part.coords(), snake_part.color()));
+				grid.data.push(GridPoint::new(
+					GameObject::SnakePart,
+					snake_part.coords(),
+					snake_part.color(),
+				));
 			}
 		}
 		for apple in &self.apples {
 			grid.data.push(GridPoint::new(
+				GameObject::Apple,
 				apple.coords(),
 				Color::new(1.0, 0.0, 0.0, 0.0),
 			))
@@ -75,10 +79,12 @@ impl GameData {
 		self.grid = grid;
 	}
 
-	/// Add a new snake to the game.
+	/// Add a new snake to the game. "coords" is a coordinates of leading
+	/// part of a snake.
 	pub fn spawn_snake<T: Into<String>>(
 		&mut self,
 		name: T,
+		coords: Coordinates,
 		direction: Direction,
 		length: u32,
 	) -> crate::Result<()> {
@@ -86,7 +92,8 @@ impl GameData {
 		if capacity != 0 && capacity == self.snakes.len() {
 			Err(Box::new(GameError::TooMuchSnakes))
 		} else {
-			self.snakes.push(Snake::new(name.into(), direction, length));
+			self.snakes
+				.push(Snake::new(name.into(), coords, direction, length));
 			Ok(())
 		}
 	}
@@ -109,6 +116,15 @@ impl GameData {
 			}
 		}
 		Err(Box::new(GameError::SnakeNotFound(name)))
+	}
+
+	/// Return a vector of tuples with snake names and their lengths.
+	pub fn scoreboard(&self) -> Vec<(String, usize)> {
+		let mut scoreboard: Vec<(String, usize)> = Vec::with_capacity(self.snakes.len());
+		for snake in &self.snakes {
+			scoreboard.push((snake.name.clone(), snake.parts.len()))
+		}
+		scoreboard
 	}
 
 	/// Return game [`Grid`].
@@ -145,15 +161,28 @@ pub struct Snake {
 }
 
 impl Snake {
-	/// Return [`Snake`] with specified name, direction, and length (amount of parts).
-	fn new<T: Into<String>>(name: T, initial_direction: Direction, initial_length: u32) -> Self {
+	/// Return [`Snake`] with specified name, initial leading part location,
+	/// direction and length (amount of parts).
+	fn new<T: Into<String>>(
+		name: T,
+		coordinates: Coordinates,
+		direction: Direction,
+		length: u32,
+	) -> Self {
 		let mut snake = Self {
 			name: name.into(),
 			parts: {
 				let mut v = vec![];
-				for i in 0..initial_length {
+				for i in 0..length {
+					let offset = -(length as i32 + i as i32);
+					let part_coords = match direction {
+						Direction::Right => (coordinates.x + offset, coordinates.y),
+						Direction::Left => (coordinates.x - offset, coordinates.y),
+						Direction::Up => (coordinates.x, coordinates.y + offset),
+						Direction::Down => (coordinates.x, coordinates.y - offset),
+					}.into();
 					v.push(SnakePart::new(
-						Coordinates::new(0, i as i32),
+						part_coords,
 						Color::GREEN,
 						Direction::Right,
 					));
@@ -162,7 +191,7 @@ impl Snake {
 			},
 		};
 		if let Some(lp) = snake.lp_mut() {
-			lp.change_direction(initial_direction);
+			lp.change_direction(direction);
 		}
 		snake
 	}
@@ -171,20 +200,20 @@ impl Snake {
 	/// part direction.
 	fn move_parts(&mut self, step: i32) {
 		let parts = &mut self.parts;
-		//parts.reverse();
-		// for i in parts.len()..0 {
-		//	let part = &mut parts[i].clone();
-		//	match parts.get_mut(i + 1) {
-		//		Some(next_part) => match part.direction {
-		//			Direction::Up => next_part.mv((0, step)),
-		//			Direction::Down => next_part.mv((0, -step)),
-		//			Direction::Left => next_part.mv((-step, 0)),
-		//			Direction::Right => next_part.mv((step, 0)),
-		//		},
-		//		None => break,
-		//	};
-		// }
-		//parts.reverse();
+		parts.reverse();
+		for i in 0..parts.len() {
+			let part = &mut parts[i].clone();
+			match parts.get_mut(i + 1) {
+				Some(next_part) => match part.direction {
+					Direction::Up => next_part.mv((0, step)),
+					Direction::Down => next_part.mv((0, -step)),
+					Direction::Left => next_part.mv((-step, 0)),
+					Direction::Right => next_part.mv((step, 0)),
+				},
+				None => break,
+			};
+		}
+		parts.reverse();
 		self.parts = parts.clone();
 	}
 
@@ -478,14 +507,30 @@ impl Color {
 	}
 }
 
+/// Abstraction enum with available kinds of game objects.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GameObject {
+	/// A part of a snake.
+	SnakePart,
+
+	/// An apple.
+	Apple,
+}
+
 /// Game grid abstractions.
 pub mod grid {
-	use super::*;
+	use rand::Rng;
+
+use super::*;
 
 	/// Struct which represents one unique point of the grid.
 	#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 	#[serde(rename_all = "snake_case")]
 	pub struct GridPoint {
+		/// What kind of object is located in this point.
+		pub object_kind: GameObject,
+
 		/// [`Coordinates`] of the [`GridPoint`].
 		/// Should be unique.
 		pub coordinates: Coordinates,
@@ -496,8 +541,12 @@ pub mod grid {
 
 	impl GridPoint {
 		/// Return a new [`GridPoint`].
-		pub fn new(coordinates: Coordinates, color: Color) -> Self {
-			Self { coordinates, color }
+		pub fn new(object_kind: GameObject, coordinates: Coordinates, color: Color) -> Self {
+			Self {
+				object_kind,
+				coordinates,
+				color,
+			}
 		}
 
 		/// Change color of the [`GridPoint`]
@@ -527,6 +576,21 @@ pub mod grid {
 				data: Vec::with_capacity(size.0 * size.1),
 				size,
 			}
+		}
+
+		/// Return random coordinates fitting in the grid. Add offset to each
+		/// randomly generated value, may be set to 0.
+		pub fn random_coords(&self, offset: i32) -> Coordinates {
+			let mut rng = rand::thread_rng();
+			Coordinates::new(
+				rng.gen_range(0..self.size.0) as i32 + offset,
+				rng.gen_range(0..self.size.0) as i32 + offset,
+			)
+		}
+
+		/// Convert [`Grid`] to binary json.
+		pub fn as_bytes(&self) -> Result<Vec<u8>> {
+			Ok(serde_json::to_string(self)?.as_bytes().to_vec())
 		}
 	}
 
