@@ -202,7 +202,14 @@ impl Snake {
 						Direction::Down => (coordinates.x, coordinates.y - offset),
 					}
 					.into();
-					v.push(SnakePart::new(part_coords, Color::GREEN, Direction::Right));
+
+					let part_color = if i == length - 1 {
+						Color::RED
+					} else {
+						Color::GREEN
+					};
+
+					v.push(SnakePart::new(part_coords, part_color, Direction::Right));
 				}
 				v.reverse();
 				v
@@ -431,7 +438,7 @@ impl fmt::Display for Coordinates {
 }
 
 /// Structure which determines direction of something.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Direction {
 	/// Up.

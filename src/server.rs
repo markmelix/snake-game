@@ -13,12 +13,9 @@ use serde::{Deserialize, Serialize};
 use std::{
 	fmt::{self, Debug},
 	io::{Read, Write},
-	thread,
+	thread, sync::{mpsc::{self, Sender}, Mutex, Arc}
 };
-use std::{
-	net::{TcpListener, TcpStream, ToSocketAddrs},
-	time::Duration,
-};
+use std::net::{TcpListener, TcpStream, ToSocketAddrs};
 
 /// Connect to the server with specified address. `client` is a name of the
 /// snake.
@@ -40,6 +37,7 @@ pub fn connect<A: ToSocketAddrs + Debug>(
 /// Run server with specified address and [`GameData`].
 pub fn run<A: ToSocketAddrs>(address: A, gamedata: GameData) -> Result<()> {
 	let listener = TcpListener::bind(address)?;
+	let gamedata = Arc::new(Mutex::new(gamedata));
 
 	loop {
 		let (socket, address) = match listener.accept() {
@@ -49,6 +47,7 @@ pub fn run<A: ToSocketAddrs>(address: A, gamedata: GameData) -> Result<()> {
 				continue;
 			}
 		};
+		println!("Amount of snakes in the game: {:?}", gamedata.lock().unwrap().scoreboard());
 		let gamedata = gamedata.clone();
 		thread::spawn(move || match handle_client(socket, gamedata) {
 			Ok(_) => println!("Successfully handled client {}", address),
@@ -58,7 +57,7 @@ pub fn run<A: ToSocketAddrs>(address: A, gamedata: GameData) -> Result<()> {
 }
 
 /// Handle client connected to server.
-fn handle_client(mut stream: TcpStream, mut gamedata: GameData) -> Result<()> {
+fn handle_client(mut stream: TcpStream, gamedata: Arc<Mutex<GameData>>) -> Result<()> {
 	'a: loop {
 		let mut buffer = [0; 1024];
 		stream.read(&mut buffer)?;
@@ -76,16 +75,19 @@ fn handle_client(mut stream: TcpStream, mut gamedata: GameData) -> Result<()> {
 			};
 
 			let response = match request.clone().kind {
-				RequestKind::Connect => Response::new(
-					request.clone(),
-					gamedata.spawn_snake(
-						&request.clone().client,
-						gamedata.grid().random_coords(10),
-						Direction::Right,
-						10,
-					),
-				),
+				RequestKind::Connect => {
+					let snake_coords = gamedata.lock().unwrap().grid().random_coords(10);
+					Response::new(
+						request.clone(),
+						gamedata.lock().unwrap().spawn_snake(
+							&request.clone().client,
+							snake_coords,
+							Direction::Right,
+							10,
+						))
+					}
 				RequestKind::ChangeDirection(direction) => {
+					let mut gamedata = gamedata.lock().unwrap();
 					let snake = gamedata.snake(request.clone().client);
 					match snake {
 						Ok(snake) => Response::new(
@@ -98,21 +100,23 @@ fn handle_client(mut stream: TcpStream, mut gamedata: GameData) -> Result<()> {
 				RequestKind::GetGrid => Response::new(request.clone(), Ok(())),
 				RequestKind::Disconnect => Response::new(
 					request.clone(),
-					gamedata.kill_snake(request.client).map(|_| ()),
+					gamedata.lock().unwrap().kill_snake(request.client).map(|_| ()),
 				),
 			};
 
-			println!("{}", response);
+			if request.kind != RequestKind::GetGrid {
+				println!("{}", response);
+			}
 
-			thread::sleep(Duration::from_millis(500));
+			//thread::sleep(Duration::from_millis(250));
 
-			gamedata.kill_dead_snakes();
-			gamedata.update_grid();
+			gamedata.lock().unwrap().kill_dead_snakes();
+			gamedata.lock().unwrap().update_grid();
 
 			match request.kind {
 				RequestKind::Disconnect => break 'a,
 				RequestKind::GetGrid => {
-					let buffer = match gamedata.grid().as_bytes() {
+					let buffer = match gamedata.lock().unwrap().grid().as_bytes() {
 						Ok(val) => val,
 						Err(e) => {
 							eprintln!("Failed to convert gamedata: {}", e);
@@ -129,7 +133,7 @@ fn handle_client(mut stream: TcpStream, mut gamedata: GameData) -> Result<()> {
 }
 
 /// Enum of server request kinds.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RequestKind {
 	/// Request to connect to server.

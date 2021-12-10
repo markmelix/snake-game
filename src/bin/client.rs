@@ -10,10 +10,7 @@ use snake_game::{
 	game::{self, Grid},
 	server,
 };
-use std::{
-	io::Read,
-	net::TcpStream,
-};
+use std::{io::Read, net::TcpStream};
 
 fn main() {
 	let matches = CliApp::new("Snake Game Client by Mark")
@@ -191,10 +188,6 @@ impl GuiApp for Client {
 			};
 
 			egui::CentralPanel::default().show(ctx, |ui| {
-				let offset = 10.0;
-				let cell = 25.0;
-				let mut shapes: Vec<egui::Shape> = Vec::new();
-
 				let grid = self.grid.clone().unwrap();
 
 				println!(
@@ -205,29 +198,39 @@ impl GuiApp for Client {
 					grid
 				);
 
+				let offset = 10.0;
+				let cell = 10.0;
+				let frame = 10.0; // frame stroke size
+				let mut shapes: Vec<egui::Shape> = Vec::new();
+
+				let grid = self.grid.clone().unwrap();
+
 				shapes.push(egui::Shape::Rect(epaint::RectShape::stroke(
 					epaint::Rect {
-						min: egui::pos2(offset, offset),
-						max: egui::pos2(grid.size.0 as f32 * cell, grid.size.1 as f32 * cell),
+						min: egui::pos2(offset - frame, offset - frame),
+						max: egui::pos2(
+							(grid.size.0 as f32 * cell) + frame,
+							(grid.size.1 as f32 * cell) + frame,
+						),
 					},
 					0.0,
-					epaint::Stroke::new(1u8, color32(game::Color::WHITE)),
+					epaint::Stroke::new(frame, color32(game::Color::WHITE)),
 				)));
 
+				let offset = offset + frame / 2.0;
+
 				for point in grid.data {
+					let (x, y) = (
+						point.coordinates.x as f32,
+						(grid.size.1 as i32 - point.coordinates.y) as f32,
+					);
 					shapes.push(egui::Shape::Rect(epaint::RectShape::filled(
 						epaint::Rect {
 							min: egui::pos2(
-								point.coordinates.x as f32 + offset,
-								point.coordinates.y as f32 + offset,
-								// 0.0 + offset, 0.0 + offset
+								cell * x + offset - cell,
+								cell * y + offset - cell,
 							),
-							max: egui::pos2(
-								// point.coordinates.x as f32 * cell + offset,
-								// point.coordinates.y as f32 * cell + offset,
-								cell * 2.0,
-								cell * 2.0,
-							),
+							max: egui::pos2(cell * x + offset, cell * y + offset),
 						},
 						0.0,
 						color32(point.color),
@@ -237,12 +240,6 @@ impl GuiApp for Client {
 				ui.painter().extend(shapes);
 			});
 			ctx.request_repaint();
-
-			egui::SidePanel::new(egui::panel::Side::Right, "disconnect_panel").show(ctx, |ui| {
-				if ui.button("Disconnect").clicked() {
-					self.disconnect();
-				};
-			});
 
 			let mut stream = self.stream();
 
@@ -275,6 +272,12 @@ impl GuiApp for Client {
 				.write(&mut stream)
 				.unwrap();
 			}
+
+			egui::SidePanel::new(egui::panel::Side::Right, "disconnect_panel").show(ctx, |ui| {
+				if ui.button("Disconnect").clicked() {
+					self.disconnect();
+				};
+			});
 		} else {
 			self.connect = false;
 		}
