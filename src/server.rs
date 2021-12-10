@@ -104,25 +104,27 @@ fn handle_client(mut stream: TcpStream, mut gamedata: GameData) -> Result<()> {
 
 			println!("{}", response);
 
-			thread::sleep(Duration::from_millis(300));
+			thread::sleep(Duration::from_millis(500));
+
+			gamedata.kill_dead_snakes();
 			gamedata.update_grid();
 
-			if let RequestKind::Disconnect = request.kind {
-				break 'a;
+			match request.kind {
+				RequestKind::Disconnect => break 'a,
+				RequestKind::GetGrid => {
+					let buffer = match gamedata.grid().as_bytes() {
+						Ok(val) => val,
+						Err(e) => {
+							eprintln!("Failed to convert gamedata: {}", e);
+							return Err(e);
+						}
+					};
+					stream.write(&buffer)?;
+				}
+				_ => (),
 			}
 		}
-
-		let buffer = match gamedata.grid().as_bytes() {
-			Ok(val) => val,
-			Err(e) => {
-				eprintln!("Failed to convert gamedata: {}", e);
-				return Err(e);
-			}
-		};
-
-		stream.write(&buffer)?;
 	}
-
 	Ok(())
 }
 
@@ -204,6 +206,7 @@ impl Request {
 struct Response<T> {
 	/// [`Request`] to answer.
 	request: Request,
+
 	/// Result of some game function.
 	response: Result<T>,
 }

@@ -1,44 +1,51 @@
 #![allow(dead_code)]
 #![allow(clippy::unused_io_amount)]
 
-use clap::{App, Arg};
+use clap::{App as CliApp, Arg};
 use eframe::{
 	egui::{self, epaint},
-	epi,
+	epi::{self, App as GuiApp},
 };
 use snake_game::{
-	game::{self, GameData, Grid},
+	game::{self, Grid},
 	server,
 };
-use std::{io::Read, net::TcpStream};
+use std::{
+	io::Read,
+	net::TcpStream,
+};
 
 fn main() {
-	let matches =
-		App::new("Snake Game Client by Mark")
-			.about("Lets connect to some multiplayer server")
-			.arg(
-				Arg::with_name("address")
-					.short("a")
-					.takes_value(true)
-					.help("Server address"),
-			)
-			.arg(
-				Arg::with_name("client_name")
-					.short("n")
-					.takes_value(true)
-					.help("Snake name"),
-			)
-			.arg(Arg::with_name("connect").short("c").help(
-				"Connect to server automatically if address and client name arguments specified",
-			))
-			.get_matches();
+	let matches = CliApp::new("Snake Game Client by Mark")
+		.about("Lets connect to some multiplayer server")
+		.arg(
+			Arg::with_name("address")
+				.short("a")
+				.takes_value(true)
+				.help("Server address"),
+		)
+		.arg(
+			Arg::with_name("client_name")
+				.short("n")
+				.takes_value(true)
+				.help("Snake name"),
+		)
+		.arg(Arg::with_name("connect").short("c").help(
+			"Connect to server automatically if address and client name arguments are specified",
+		))
+		.get_matches();
 
 	let server_address = matches.value_of("address").map(|val| val.to_string());
 	let client_name = matches.value_of("client_name").map(|val| val.to_string());
 	let connect = matches.is_present("connect");
 
+	if connect {
+		todo!();
+	}
+
 	let client = Client::new(client_name, server_address, connect);
 	let native_options = eframe::NativeOptions::default();
+
 	eframe::run_native(Box::new(client), native_options);
 }
 
@@ -77,28 +84,63 @@ where {
 		}
 	}
 
+	/// Return cloned [`TcpStream`].
+	fn stream(&self) -> TcpStream {
+		self.stream.as_ref().unwrap().try_clone().unwrap()
+	}
+
 	/// Request grid from the server. Should be ran only after sending
 	/// connection request to the server.
-	fn request_grid(&mut self) -> Grid {
+	fn request_grid(&mut self) -> snake_game::Result<Grid> {
+		std::thread::sleep(std::time::Duration::from_millis(100));
+
 		let mut buffer = [0; 1024 * 10];
 
-		let mut stream = self.stream.as_ref().unwrap().try_clone().unwrap();
+		let mut stream = self.stream();
 
 		server::Request::new(self.name.clone().unwrap(), server::RequestKind::GetGrid)
 			.write(&mut stream)
 			.unwrap();
-		stream.read(&mut buffer).expect("reading stream buffer");
+
+		stream.read(&mut buffer)?;
 
 		let string = String::from_utf8_lossy(&buffer);
 
+		//std::thread::sleep(std::time::Duration::from_millis(100));
+
 		game::Grid::from_string(&string.trim_matches(char::from(0)))
-			.expect("parsing json string to get game grid")
+	}
+
+	/// Disconnect from the server.
+	///
+	/// # Panic
+	/// Panics if `self.stream` or `self.name` is None or if writing to the
+	/// server buffer has failed.
+	fn disconnect(&mut self) {
+		let mut stream = self.stream();
+
+		server::Request::new(self.name.clone().unwrap(), server::RequestKind::Disconnect)
+			.write(&mut stream)
+			.unwrap();
+
+		self.stream = None;
+		self.connection_status = String::from("Disconnected");
+		self.connect = false;
 	}
 }
 
-impl epi::App for Client {
+impl GuiApp for Client {
 	fn name(&self) -> &str {
 		"Snake Game by Mark"
+	}
+
+	fn setup(
+		&mut self,
+		ctx: &egui::CtxRef,
+		_frame: &mut epi::Frame<'_>,
+		_storage: Option<&dyn epi::Storage>,
+	) {
+		ctx.set_visuals(egui::Visuals::dark());
 	}
 
 	fn update(&mut self, ctx: &egui::CtxRef, _frame: &mut epi::Frame<'_>) {
@@ -129,7 +171,6 @@ impl epi::App for Client {
 							self.connection_status = String::from("Success");
 							self.stream = Some(stream);
 							self.connect = true;
-							//thread::sleep(Duration::from_secs(1));
 						}
 						Err(e) => {
 							self.connection_status = format!("Error: {}", e);
@@ -139,37 +180,113 @@ impl epi::App for Client {
 				ui.label(self.connection_status.clone());
 			});
 		} else if self.stream.is_some() {
-			self.grid = Some(self.request_grid());
-			let mut shapes: Vec<egui::Shape> = Vec::new();
+			self.grid = match self.request_grid() {
+				Ok(grid) => Some(grid),
+				Err(e) => {
+					self.connection_status = format!("Error while requesting a grid: {}", e);
+					self.connect = false;
+					self.stream = None;
+					return;
+				}
+			};
+
 			egui::CentralPanel::default().show(ctx, |ui| {
+				let offset = 10.0;
+				let cell = 25.0;
+				let mut shapes: Vec<egui::Shape> = Vec::new();
+
 				let grid = self.grid.clone().unwrap();
+
+				println!(
+					"---\nDisplaying \"{}\" server's grid with {}x{} size:\n{}---\n",
+					self.address.clone().unwrap(),
+					grid.size.0,
+					grid.size.1,
+					grid
+				);
+
+				shapes.push(egui::Shape::Rect(epaint::RectShape::stroke(
+					epaint::Rect {
+						min: egui::pos2(offset, offset),
+						max: egui::pos2(grid.size.0 as f32 * cell, grid.size.1 as f32 * cell),
+					},
+					0.0,
+					epaint::Stroke::new(1u8, color32(game::Color::WHITE)),
+				)));
+
 				for point in grid.data {
 					shapes.push(egui::Shape::Rect(epaint::RectShape::filled(
 						epaint::Rect {
-							min: egui::pos2(point.coordinates.x as f32, point.coordinates.y as f32),
+							min: egui::pos2(
+								point.coordinates.x as f32 + offset,
+								point.coordinates.y as f32 + offset,
+								// 0.0 + offset, 0.0 + offset
+							),
 							max: egui::pos2(
-								(point.coordinates.x + 1) as f32 * 5.0,
-								(point.coordinates.y - 1) as f32 * 5.0,
+								// point.coordinates.x as f32 * cell + offset,
+								// point.coordinates.y as f32 * cell + offset,
+								cell * 2.0,
+								cell * 2.0,
 							),
 						},
-						10.0,
+						0.0,
 						color32(point.color),
 					)));
 				}
+
 				ui.painter().extend(shapes);
 			});
 			ctx.request_repaint();
+
+			egui::SidePanel::new(egui::panel::Side::Right, "disconnect_panel").show(ctx, |ui| {
+				if ui.button("Disconnect").clicked() {
+					self.disconnect();
+				};
+			});
+
+			let mut stream = self.stream();
+
+			if ctx.input().key_pressed(egui::Key::W) {
+				server::Request::new(
+					self.name.clone().unwrap(),
+					server::RequestKind::ChangeDirection(game::Direction::Up),
+				)
+				.write(&mut stream)
+				.unwrap();
+			} else if ctx.input().key_pressed(egui::Key::S) {
+				server::Request::new(
+					self.name.clone().unwrap(),
+					server::RequestKind::ChangeDirection(game::Direction::Down),
+				)
+				.write(&mut stream)
+				.unwrap();
+			} else if ctx.input().key_pressed(egui::Key::A) {
+				server::Request::new(
+					self.name.clone().unwrap(),
+					server::RequestKind::ChangeDirection(game::Direction::Left),
+				)
+				.write(&mut stream)
+				.unwrap();
+			} else if ctx.input().key_pressed(egui::Key::D) {
+				server::Request::new(
+					self.name.clone().unwrap(),
+					server::RequestKind::ChangeDirection(game::Direction::Right),
+				)
+				.write(&mut stream)
+				.unwrap();
+			}
 		} else {
 			self.connect = false;
 		}
 	}
+
+	fn on_exit(&mut self) {
+		if self.stream.is_some() {
+			self.disconnect();
+		}
+	}
 }
 
-fn color32(color: snake_game::game::Color) -> egui::Color32 {
-	egui::Color32::from_rgb(
-		color.r as u8,
-		color.g as u8,
-		color.b as u8,
-		//color.a as u8,
-	)
+fn color32(color: game::Color) -> egui::Color32 {
+	egui::Color32::from_rgba_premultiplied(color.r, color.g, color.b, color.a)
 }

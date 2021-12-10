@@ -4,8 +4,7 @@ pub use grid::*;
 
 use crate::Result;
 use serde::{Deserialize, Serialize};
-use std::fmt;
-use std::{error::Error, fmt::Display};
+use std::{error, fmt, ops};
 
 /// Data which's sent and recieved from game server.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -19,7 +18,7 @@ pub struct GameData {
 impl GameData {
 	/// Default size of the [`game grid`](Grid). Used when one isn't provided to the [`new`](Self::new)
 	/// function or in the [`Default`](Self::default) implementation.
-	pub const DEFAULT_GRID_SIZE: (usize, usize) = (100, 100);
+	pub const DEFAULT_GRID_SIZE: (usize, usize) = Grid::DEFAULT_SIZE;
 
 	/// Recommended maximum number of snakes in the game.
 	pub const RECOMMENDED_SNAKES_AMOUNT: usize = 5;
@@ -27,7 +26,7 @@ impl GameData {
 	/// Recommended maximum number of apples in the game.
 	pub const RECOMMENDED_APPLES_AMOUNT: usize = 5;
 
-	/// Default snake step. Should be changed only with purposes of fun.
+	/// Default snake step. Should be changed only with purpose of fun.
 	const SNAKE_STEP: i32 = 1;
 
 	/// Return a new [`GameData`].
@@ -39,12 +38,15 @@ impl GameData {
 	/// game can be slowed down when new snake or apple is added because vector
 	/// of snakes and apples would be reallocated each time it happens.
 	pub fn new(
-		grid_size: (usize, usize),
+		grid_size: Option<(usize, usize)>,
 		snakes_max_amount: Option<usize>,
 		apples_max_amount: Option<usize>,
 	) -> Self {
 		Self {
-			grid: Grid::new(grid_size),
+			grid: match grid_size {
+				Some(val) => Grid::new(val),
+				None => Grid::new(Self::DEFAULT_GRID_SIZE),
+			},
 			snakes: match snakes_max_amount {
 				Some(val) => Vec::with_capacity(val),
 				None => Vec::new(),
@@ -56,7 +58,25 @@ impl GameData {
 		}
 	}
 
-	/// Refills [`game grid`](Grid) with a new data.
+	/// Kill over-bounded or bumped snakes.
+	pub fn kill_dead_snakes(&mut self) {
+		let snakes = self.snakes.clone();
+		for i in 0..snakes.len() {
+			if !&snakes[i].alive() {
+				self.snakes.remove(i);
+				continue;
+			}
+			for snake in &snakes {
+				for part in &snake.pwl() {
+					if self.snakes[i].lp().unwrap().coords() == part.coords() {
+						self.snakes.remove(i);
+					}
+				}
+			}
+		}
+	}
+
+	/// Refill [`game grid`](Grid) with a new data.
 	pub fn update_grid(&mut self) {
 		let mut grid = Grid::new(self.grid.size);
 		for snake in &mut self.snakes {
@@ -73,7 +93,7 @@ impl GameData {
 			grid.data.push(GridPoint::new(
 				GameObject::Apple,
 				apple.coords(),
-				Color::new(1.0, 0.0, 0.0, 0.0),
+				Color::RED,
 			))
 		}
 		self.grid = grid;
@@ -148,7 +168,7 @@ impl Default for GameData {
 	/// apples in the game and grid size depending on
 	/// [DEFAULT_GRID_SIZE](Self::DEFAULT_GRID_SIZE) constant.
 	fn default() -> Self {
-		Self::new(Self::DEFAULT_GRID_SIZE, None, None)
+		Self::new(None, None, None)
 	}
 }
 
@@ -180,13 +200,11 @@ impl Snake {
 						Direction::Left => (coordinates.x - offset, coordinates.y),
 						Direction::Up => (coordinates.x, coordinates.y + offset),
 						Direction::Down => (coordinates.x, coordinates.y - offset),
-					}.into();
-					v.push(SnakePart::new(
-						part_coords,
-						Color::GREEN,
-						Direction::Right,
-					));
+					}
+					.into();
+					v.push(SnakePart::new(part_coords, Color::GREEN, Direction::Right));
 				}
+				v.reverse();
 				v
 			},
 		};
@@ -201,15 +219,10 @@ impl Snake {
 	fn move_parts(&mut self, step: i32) {
 		let parts = &mut self.parts;
 		parts.reverse();
+		parts[0].step_move(step);
 		for i in 0..parts.len() {
-			let part = &mut parts[i].clone();
 			match parts.get_mut(i + 1) {
-				Some(next_part) => match part.direction {
-					Direction::Up => next_part.mv((0, step)),
-					Direction::Down => next_part.mv((0, -step)),
-					Direction::Left => next_part.mv((-step, 0)),
-					Direction::Right => next_part.mv((step, 0)),
-				},
+				Some(next_part) => next_part.step_move(step),
 				None => break,
 			};
 		}
@@ -262,7 +275,7 @@ impl Snake {
 				lp.change_direction(direction);
 				Ok(())
 			}
-			None => panic!("there's no parts in the snake"),
+			None => Err(Box::new(GameError::EmptySnake(self.name()))),
 		}
 	}
 
@@ -304,11 +317,29 @@ impl SnakePart {
 	///
 	/// assert_eq!((-2, 14), part.coords());
 	/// ```
-	fn mv(&mut self, coordinates: (i32, i32)) {
-		self.coordinates = Coordinates::new(
-			self.coordinates.x + coordinates.0,
-			self.coordinates.y + coordinates.1,
-		)
+	fn mv(&mut self, coordinates: impl Into<Coordinates>) {
+		self.coordinates = self.coordinates + coordinates.into();
+	}
+
+	/// Move part relatively to current direction on `step` points.
+	///
+	/// # Example
+	/// ```
+	/// // Create new part with (3, 4) coordinates.
+	/// let mut part = SnakePart::new(Coordinates::new(3, 4), Color::BLACK, Direction::Right);
+	///
+	/// // Move part relatively to its current direction on 1 point.
+	/// part.step_move(1);
+	///
+	/// assert_eq!((4, 4), part.coords());
+	/// ```
+	fn step_move(&mut self, step: i32) {
+		match self.direction {
+			Direction::Up => self.mv((0, step)),
+			Direction::Down => self.mv((0, -step)),
+			Direction::Left => self.mv((-step, 0)),
+			Direction::Right => self.mv((step, 0)),
+		}
 	}
 
 	/// Change part direction.
@@ -385,6 +416,20 @@ impl From<(i32, i32)> for Coordinates {
 	}
 }
 
+impl ops::Add for Coordinates {
+	type Output = Self;
+
+	fn add(self, other: Self) -> Self::Output {
+		Self::new(self.x + other.x, self.y + other.y)
+	}
+}
+
+impl fmt::Display for Coordinates {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "({}, {})", self.x, self.y)
+	}
+}
+
 /// Structure which determines direction of something.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -419,91 +464,69 @@ impl fmt::Display for Direction {
 #[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct Color {
-	/// Red component, 0.0 - 1.0
-	pub r: f32,
-	/// Green component, 0.0 - 1.0
-	pub g: f32,
-	/// Blue component, 0.0 - 1.0
-	pub b: f32,
-	/// Transparency, 0.0 - 1.0
-	pub a: f32,
+	/// Red component
+	pub r: u8,
+
+	/// Green component
+	pub g: u8,
+
+	/// Blue component
+	pub b: u8,
+
+	/// Transparency
+	pub a: u8,
 }
 
 impl Color {
 	/// The black color.
 	pub const BLACK: Color = Color {
-		r: 0.0,
-		g: 0.0,
-		b: 0.0,
-		a: 1.0,
+		r: 0,
+		g: 0,
+		b: 0,
+		a: 255,
 	};
 
 	/// The white color.
 	pub const WHITE: Color = Color {
-		r: 1.0,
-		g: 1.0,
-		b: 1.0,
-		a: 1.0,
+		r: 255,
+		g: 255,
+		b: 255,
+		a: 255,
 	};
 
 	/// The green color.
 	pub const GREEN: Color = Color {
-		r: 0.0,
-		g: 1.0,
-		b: 0.0,
-		a: 1.0,
+		r: 0,
+		g: 255,
+		b: 0,
+		a: 255,
+	};
+
+	/// The green color.
+	pub const RED: Color = Color {
+		r: 255,
+		g: 0,
+		b: 0,
+		a: 255,
 	};
 
 	/// A color with no opacity.
 	pub const TRANSPARENT: Color = Color {
-		r: 0.0,
-		g: 0.0,
-		b: 0.0,
-		a: 0.0,
+		r: 0,
+		g: 0,
+		b: 0,
+		a: 0,
 	};
 
-	/// Creates a new [`Color`].
-	///
-	/// In debug mode, it will panic if the values are not in the correct
-	/// range: 0.0 - 1.0
-	pub fn new(r: f32, g: f32, b: f32, a: f32) -> Color {
-		debug_assert!((0.0..=1.0).contains(&r), "Red component must be on [0, 1]");
-		debug_assert!(
-			(0.0..=1.0).contains(&g),
-			"Green component must be on [0, 1]"
-		);
-		debug_assert!((0.0..=1.0).contains(&b), "Blue component must be on [0, 1]");
-		debug_assert!(
-			(0.0..=1.0).contains(&a),
-			"Alpha component must be on [0, 1]"
-		);
-
+	/// Return a new [`Color`]
+	pub fn new(r: u8, g: u8, b: u8, a: u8) -> Self {
 		Color { r, g, b, a }
 	}
+}
 
-	/// Creates a [`Color`] from its RGB components.
-	pub const fn from_rgb(r: f32, g: f32, b: f32) -> Color {
-		Color::from_rgba(r, g, b, 1.0f32)
-	}
-
-	/// Creates a [`Color`] from its RGBA components.
-	pub const fn from_rgba(r: f32, g: f32, b: f32, a: f32) -> Color {
-		Color { r, g, b, a }
-	}
-
-	/// Creates a [`Color`] from its RGB8 components.
-	pub fn from_rgb8(r: u8, g: u8, b: u8) -> Color {
-		Color::from_rgba8(r, g, b, 1.0)
-	}
-
-	/// Creates a [`Color`] from its RGB8 components and an alpha value.
-	pub fn from_rgba8(r: u8, g: u8, b: u8, a: f32) -> Color {
-		Color {
-			r: f32::from(r) / 255.0,
-			g: f32::from(g) / 255.0,
-			b: f32::from(b) / 255.0,
-			a,
-		}
+impl fmt::Display for Color {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "({}, {}, {}, {})", self.r, self.g, self.b, self.a)
 	}
 }
 
@@ -522,7 +545,7 @@ pub enum GameObject {
 pub mod grid {
 	use rand::Rng;
 
-use super::*;
+	use super::*;
 
 	/// Struct which represents one unique point of the grid.
 	#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -549,9 +572,14 @@ use super::*;
 			}
 		}
 
-		/// Change color of the [`GridPoint`]
+		/// Change color of the [`GridPoint`].
 		pub fn change_color(&mut self, color: Color) {
 			self.color = color;
+		}
+
+		/// Return coordinates of the [`GridPoint`].
+		pub fn coords(&self) -> Coordinates {
+			self.coordinates
 		}
 	}
 
@@ -568,7 +596,7 @@ use super::*;
 	impl Grid {
 		/// Default size of the grid used with [`Default`](Self::default) trait
 		/// implementation.
-		pub const DEFAULT_SIZE: (usize, usize) = (10, 10);
+		pub const DEFAULT_SIZE: (usize, usize) = (25, 25);
 
 		/// Return a new [`Grid`].
 		pub fn new(size: (usize, usize)) -> Self {
@@ -604,25 +632,46 @@ use super::*;
 			Self::new(Self::DEFAULT_SIZE)
 		}
 	}
+
+	impl fmt::Display for Grid {
+		fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+			for (i, point) in self.data.iter().enumerate() {
+				writeln!(
+					f,
+					"{:?}[{}] at {} with rgba{} color",
+					point.object_kind,
+					i,
+					point.coords(),
+					point.color
+				)?;
+			}
+			Ok(())
+		}
+	}
 }
 
 /// Error type returned by [`game`](crate::game) module functions.
 #[derive(Debug, Clone)]
 pub enum GameError {
-	/// Snake with name specified in argument name not found.
+	/// Snake with name specified in argument not found.
 	SnakeNotFound(String),
+
 	/// Adding a snake with name specified in variant argument when maximum
 	/// amount of snakes in game is already reached.
 	TooMuchSnakes,
+
+	/// Snake with name specified in argument has no parts.
+	EmptySnake(String),
 }
 
-impl Display for GameError {
+impl fmt::Display for GameError {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
 			Self::SnakeNotFound(name) => write!(f, "snake with {} name not found", name),
 			Self::TooMuchSnakes => write!(f, "maximum amount of snakes in the game is reached"),
+			Self::EmptySnake(name) => write!(f, "snake with {} name has no parts", name),
 		}
 	}
 }
 
-impl Error for GameError {}
+impl error::Error for GameError {}

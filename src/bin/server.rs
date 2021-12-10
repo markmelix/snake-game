@@ -62,9 +62,13 @@ fn main() {
 		None => GameData::RECOMMENDED_APPLES_AMOUNT,
 	};
 
+	let address = format!("localhost:{}", port);
+
+	println!("Running server on {} address", address);
+
 	if let Err(e) = server::run(
-		format!("localhost:{}", port),
-		GameData::new(grid_size, Some(snakes), Some(apples)),
+		address,
+		GameData::new(Some(grid_size), Some(snakes), Some(apples)),
 	) {
 		eprintln!("Error while running the server: {}", e);
 		return;
