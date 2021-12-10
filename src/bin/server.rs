@@ -62,7 +62,7 @@ fn main() {
 		None => GameData::RECOMMENDED_APPLES_AMOUNT,
 	};
 
-	let address = format!("localhost:{}", port);
+	let address = format!("127.0.0.1:{}", port);
 
 	println!("Running server on {} address", address);
 
