@@ -619,7 +619,7 @@ pub mod grid {
 			let mut rng = rand::thread_rng();
 			Coordinates::new(
 				rng.gen_range(0..self.size.0) as i32 + offset,
-				rng.gen_range(0..self.size.0) as i32 + offset,
+				rng.gen_range(0..self.size.1) as i32 + offset,
 			)
 		}
 

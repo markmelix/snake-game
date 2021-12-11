@@ -9,11 +9,12 @@ use crate::{
 	game::{Direction, GameData},
 	Result,
 };
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::{
 	fmt::{self, Debug},
 	io::{Read, Write},
-	thread, sync::{mpsc::{self, Sender}, Mutex, Arc}
+	thread, sync::{Mutex, Arc}
 };
 use std::net::{TcpListener, TcpStream, ToSocketAddrs};
 
@@ -47,7 +48,6 @@ pub fn run<A: ToSocketAddrs>(address: A, gamedata: GameData) -> Result<()> {
 				continue;
 			}
 		};
-		println!("Amount of snakes in the game: {:?}", gamedata.lock().unwrap().scoreboard());
 		let gamedata = gamedata.clone();
 		thread::spawn(move || match handle_client(socket, gamedata) {
 			Ok(_) => println!("Successfully handled client {}", address),
@@ -76,14 +76,15 @@ fn handle_client(mut stream: TcpStream, gamedata: Arc<Mutex<GameData>>) -> Resul
 
 			let response = match request.clone().kind {
 				RequestKind::Connect => {
-					let snake_coords = gamedata.lock().unwrap().grid().random_coords(10);
+					let snake_coords = gamedata.lock().unwrap().grid().random_coords(0);
+					println!("{:?}", snake_coords);
 					Response::new(
 						request.clone(),
 						gamedata.lock().unwrap().spawn_snake(
 							&request.clone().client,
 							snake_coords,
 							Direction::Right,
-							10,
+							rand::thread_rng().gen_range(5..=10),
 						))
 					}
 				RequestKind::ChangeDirection(direction) => {
@@ -108,7 +109,7 @@ fn handle_client(mut stream: TcpStream, gamedata: Arc<Mutex<GameData>>) -> Resul
 				println!("{}", response);
 			}
 
-			//thread::sleep(Duration::from_millis(250));
+			//thread::sleep(std::time::Duration::from_millis());
 
 			gamedata.lock().unwrap().kill_dead_snakes();
 			gamedata.lock().unwrap().update_grid();
