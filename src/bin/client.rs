@@ -89,7 +89,7 @@ where {
 	/// Request grid from the server. Should be ran only after sending
 	/// connection request to the server.
 	fn request_grid(&mut self) -> snake_game::Result<Grid> {
-		std::thread::sleep(std::time::Duration::from_millis(100));
+		//std::thread::sleep(std::time::Duration::from_millis(100));
 
 		let mut buffer = [0; 1024 * 10];
 

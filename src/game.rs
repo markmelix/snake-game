@@ -603,7 +603,7 @@ pub mod grid {
 	impl Grid {
 		/// Default size of the grid used with [`Default`](Self::default) trait
 		/// implementation.
-		pub const DEFAULT_SIZE: (usize, usize) = (25, 25);
+		pub const DEFAULT_SIZE: (usize, usize) = (50, 25);
 
 		/// Return a new [`Grid`].
 		pub fn new(size: (usize, usize)) -> Self {

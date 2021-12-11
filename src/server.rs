@@ -14,9 +14,12 @@ use serde::{Deserialize, Serialize};
 use std::{
 	fmt::{self, Debug},
 	io::{Read, Write},
-	thread, sync::{Mutex, Arc}
+	thread, sync::{Mutex, Arc}, time::Duration
 };
 use std::net::{TcpListener, TcpStream, ToSocketAddrs};
+
+/// Default delay between every server response.
+pub const GAME_DELAY: Duration = Duration::from_millis(50);
 
 /// Connect to the server with specified address. `client` is a name of the
 /// snake.
@@ -36,9 +39,12 @@ pub fn connect<A: ToSocketAddrs + Debug>(
 }
 
 /// Run server with specified address and [`GameData`].
-pub fn run<A: ToSocketAddrs>(address: A, gamedata: GameData) -> Result<()> {
+/// `delay` is a delay between every response, it may be used to slow down the
+/// game. If `delay` is none, `GAME_DELAY` value is used.
+pub fn run<A: ToSocketAddrs>(address: A, gamedata: GameData, game_delay: Option<Duration>) -> Result<()> {
 	let listener = TcpListener::bind(address)?;
 	let gamedata = Arc::new(Mutex::new(gamedata));
+	let game_delay = game_delay.map_or(GAME_DELAY, |d| d);
 
 	loop {
 		let (socket, address) = match listener.accept() {
@@ -49,7 +55,7 @@ pub fn run<A: ToSocketAddrs>(address: A, gamedata: GameData) -> Result<()> {
 			}
 		};
 		let gamedata = gamedata.clone();
-		thread::spawn(move || match handle_client(socket, gamedata) {
+		thread::spawn(move || match handle_client(socket, gamedata, game_delay) {
 			Ok(_) => println!("Successfully handled client {}", address),
 			Err(e) => eprintln!("Failed to handle client \"{}\": {}", address, e),
 		});
@@ -57,7 +63,9 @@ pub fn run<A: ToSocketAddrs>(address: A, gamedata: GameData) -> Result<()> {
 }
 
 /// Handle client connected to server.
-fn handle_client(mut stream: TcpStream, gamedata: Arc<Mutex<GameData>>) -> Result<()> {
+/// `delay` is a delay between every request, it may be used to slow down the
+/// game.
+fn handle_client(mut stream: TcpStream, gamedata: Arc<Mutex<GameData>>, delay: Duration) -> Result<()> {
 	'a: loop {
 		let mut buffer = [0; 1024];
 		stream.read(&mut buffer)?;
@@ -109,10 +117,10 @@ fn handle_client(mut stream: TcpStream, gamedata: Arc<Mutex<GameData>>) -> Resul
 				println!("{}", response);
 			}
 
-			//thread::sleep(std::time::Duration::from_millis());
-
 			gamedata.lock().unwrap().kill_dead_snakes();
 			gamedata.lock().unwrap().update_grid();
+
+			thread::sleep(delay);
 
 			match request.kind {
 				RequestKind::Disconnect => break 'a,

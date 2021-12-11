@@ -41,6 +41,15 @@ fn main() {
 					"Specifies maximum amount of apples that can be spawned on the server. Default is {}",
 						GameData::RECOMMENDED_APPLES_AMOUNT)),
 		)
+		.arg(
+			Arg::with_name("game_delay")
+				.short("-d")
+				.long("delay")
+				.value_name("DURATION")
+				.help(&format!(
+					"Specifies delay between every server response. Default is {:?}",
+						server::GAME_DELAY)),
+		)
 		.get_matches();
 
 	let port = matches.value_of("port").unwrap_or(DEFAULT_PORT);
@@ -61,6 +70,10 @@ fn main() {
 		Some(val) => val.parse::<usize>().expect("Parsing apples argument"),
 		None => GameData::RECOMMENDED_APPLES_AMOUNT,
 	};
+	let game_delay = match matches.value_of("game_delay") {
+		Some(val) => val.parse::<humantime::Duration>().expect("Parsing delay argument").into(),
+		None => server::GAME_DELAY,
+	};
 
 	let address = format!("0.0.0.0:{}", port);
 
@@ -69,6 +82,7 @@ fn main() {
 	if let Err(e) = server::run(
 		address,
 		GameData::new(Some(grid_size), Some(snakes), Some(apples)),
+		Some(game_delay)
 	) {
 		eprintln!("Error while running the server: {}", e);
 		return;
