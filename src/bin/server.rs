@@ -37,6 +37,7 @@ fn main() {
 			Arg::with_name("apples")
 				.short("-a")
 				.long("apples")
+				.value_name("NUMBER")
 				.help(&format!(
 					"Specifies maximum amount of apples that can be spawned on the server. Default is {}",
 						GameData::RECOMMENDED_APPLES_AMOUNT)),
