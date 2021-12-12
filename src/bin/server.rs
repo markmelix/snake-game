@@ -5,7 +5,7 @@ use snake_game::{game::GameData, server};
 
 fn main() {
 	let matches = App::new("Snake Game by Mark")
-		.about("Lets start own multiplayer server")
+		.about("Allows running own multiplayer server")
 		.arg(
 			Arg::with_name("port")
 				.short("p")

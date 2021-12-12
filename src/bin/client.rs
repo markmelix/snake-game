@@ -14,7 +14,7 @@ use std::{io::Read, net::TcpStream};
 
 fn main() {
 	let matches = CliApp::new("Snake Game Client by Mark")
-		.about("Lets connect to some multiplayer server")
+		.about("Allows connecting to some multiplayer server")
 		.arg(
 			Arg::with_name("address")
 				.short("a")
