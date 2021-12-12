@@ -160,7 +160,7 @@ impl GuiApp for Client {
 				ui.text_edit_singleline(&mut name);
 				self.name = Some(name);
 
-				if ui.button("Connect").clicked() {
+				if ui.button("Connect").clicked() || ctx.input().key_pressed(egui::Key::Enter) {
 					self.connection_status = String::from("Try connecting to server");
 					match server::connect(self.address.clone().unwrap(), self.name.clone().unwrap())
 					{
@@ -198,9 +198,10 @@ impl GuiApp for Client {
 					grid
 				);
 
-				let offset = 10.0;
-				let cell = 10.0;
-				let frame = 10.0; // frame stroke size
+				let cell = 20.0;
+				let frame = cell; // frame stroke size
+				let offset = cell * 2.0;
+
 				let mut shapes: Vec<egui::Shape> = Vec::new();
 
 				let grid = self.grid.clone().unwrap();
@@ -209,8 +210,8 @@ impl GuiApp for Client {
 					epaint::Rect {
 						min: egui::pos2(offset - frame, offset - frame),
 						max: egui::pos2(
-							(grid.size.0 as f32 * cell) + frame,
-							(grid.size.1 as f32 * cell) + frame,
+							(grid.size.0 as f32 * cell) + frame + cell * 2.0,
+							(grid.size.1 as f32 * cell) + frame + cell,
 						),
 					},
 					0.0,
