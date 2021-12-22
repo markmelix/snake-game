@@ -202,15 +202,18 @@ impl Session {
 
 			let mut request = exchange.request();
 
+			// Lazily acquire gamedata mutex to work with it on a fly.
+			let gamedata = || gamedata.lock().unwrap();
+
 			let response = match request.kind {
 				RequestKind::Connect => {
-					let snake_coords = gamedata.lock().unwrap().grid().random_coords(0);
+					let snake_coords = gamedata().grid().random_coords(0);
 					let mut name = request.client;
 
 					// Check whether there is already a snake with such name and
 					// if yes, change it to uniquely-generated one.
-					if gamedata.lock().unwrap().find_snake(name.clone()) {
-						name.push_str(&format!(" ({})", gamedata.lock().unwrap().snakes()));
+					if gamedata().find_snake(name.clone()) {
+						name.push_str(&format!(" ({})", gamedata().snakes()));
 					}
 
 					is_connection_request = true;
@@ -218,7 +221,7 @@ impl Session {
 
 					Response::new(
 						request.clone(),
-						gamedata.lock().unwrap().spawn_snake(
+						gamedata().spawn_snake(
 							name,
 							snake_coords,
 							Direction::Right,
@@ -235,7 +238,7 @@ impl Session {
 						}
 					}
 
-					let mut gamedata = gamedata.lock().unwrap();
+					let mut gamedata = gamedata();
 					let snake = gamedata.snake_mut(request.client.clone());
 
 					match snake {
@@ -248,7 +251,7 @@ impl Session {
 				RequestKind::GetGrid => Response::new(request.clone(), Ok(())),
 				RequestKind::Disconnect => Response::new(
 					request.clone(),
-					gamedata.lock().unwrap().kill_snake(request.client()).map(|_| ()),
+					gamedata().kill_snake(request.client()).map(|_| ()),
 				),
 			};
 
@@ -258,8 +261,8 @@ impl Session {
 
 			exchange.assign_response(response);
 
-			gamedata.lock().unwrap().kill_dead_snakes();
-			gamedata.lock().unwrap().update_grid();
+			gamedata().kill_dead_snakes();
+			gamedata().update_grid();
 
 			if let Some(delay) = delay {
 				thread::sleep(delay);
@@ -272,7 +275,7 @@ impl Session {
 					stream.write(&buffer.as_bytes())?;
 				}
 				RequestKind::GetGrid => {
-					let buffer = match gamedata.lock().unwrap().grid().as_bytes() {
+					let buffer = match gamedata().grid().as_bytes() {
 						Ok(val) => val,
 						Err(e) => {
 							log::error!("Failed to convert gamedata: {}", e);
