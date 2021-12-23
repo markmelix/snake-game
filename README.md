@@ -40,14 +40,14 @@ library documentation.
 
 ## FAQ
 ### Where is game library documentation?
-Run these commands in the project root to open generated documentation in your
+Run this command in the project root to open generated documentation in your
 default browser:
 ```bash
 cargo doc --open
 ```
 
 ### How do I get my public ip?
-Run this commands in your terminal to get your public ip:
+Run this command in your terminal to get your public ip:
 ```bash
 curl ifconfig.me
 ```
