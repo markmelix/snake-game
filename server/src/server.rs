@@ -202,7 +202,8 @@ impl Session {
 
 			let mut request = exchange.request();
 
-			// Lazily acquire gamedata mutex to work with it on a fly.
+			// Lazily acquire gamedata mutex to work with it on a fly without
+			// boilerplate code.
 			let gamedata = || gamedata.lock().unwrap();
 
 			let response = match request.kind {
