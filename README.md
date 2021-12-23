@@ -9,15 +9,15 @@ write your own (and not even necessarily on Rust!) one!
 ## How to play
 After you clone this repository, launch the server:
 ```bash
-cd server
-cargo run
+cargo run --bin server
+# for detailed information/configuration: cargo run --bin server -- --help
 ```
 
 Next, you should connect using a client. If you use the official one, type this
 into another terminal from the repository root to launch the client:
 ```bash
-cd client
-cargo run
+cargo run --bin client
+# for detailed information/configuration: cargo run --bin client -- --help
 ```
 Now fill necessary fields and connect to the started server. Enjoy the game!
 
@@ -43,7 +43,6 @@ library documentation.
 Run these commands in the project root to open generated documentation in your
 default browser:
 ```bash
-cd server
 cargo doc --open
 ```
 
