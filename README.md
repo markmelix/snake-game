@@ -6,28 +6,37 @@ Note that you aren't force to use exactly client provided by this
 repository. You can use any client which is supported by the server or even
 write your own (and not even necessarily on Rust!) one!
 
+Note that now game is in the alpha stage, so it won't be published and this
+repository becomes public only after everything in todo lists below will be
+completed and we will be completely sure nothing besides little bugs and some
+major updates is being changed in the future. Now project is very messy and it
+should be refactored and updated a lot.
+
 ## TODO list
 ### Server todos
 - [x] Generate random coordinates of a new snake depending on all parts
-- [ ] Get rid of most `unwrap`s and replace them with error handling
 - [x] Fix snake change direction algorithm
+- [ ] Add more abilities to setup server. For instance, add ability to control
+	  what color and length will snakes have after being spawned
+- [ ] Document specifications for clients
+- [ ] Implement server console with admin features
+- [ ] Get rid of most `unwrap`s and replace them with error handling
 - [ ] Make library more comfortable to be used by clients
-- [ ] Create library bindings for Python
 - [ ] Refactor to make the library more flexible (create traits)
 - [ ] Optimize algorithms and make server more fast
-- [ ] Document specifications for clients
+- [ ] Create library bindings for Python
 
 ### Logger todos
 - [ ] Implement logger library which will contain everything other libraries in
-	  this project may need for logging. Now logging are implemented by server
-	  itself using `log` and `env_logger` crates
+	  this project that may be needed for logging. Now logging are implemented
+	  by server itself using `log` and `env_logger` crates
 
 ### Official client todos
 - [ ] Get rid of most `unwrap`s and replace them with the error handling
 - [ ] Make GUI more beautiful
 - [ ] Add some information into GUI to make client more informative
-- [ ] Look for more elegant and comfortable GUI library and move in it
 - [ ] Make game more smooth
+- [ ] Look for more elegant and comfortable GUI library and move in it
 
 ## How to play
 After you clone this repository, launch the server:
