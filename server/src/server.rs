@@ -208,8 +208,8 @@ impl Session {
 
 			let response = match request.kind {
 				RequestKind::Connect => {
-					let mut rng = rand::thread_rng();
-					let snake_length = rng.gen_range(5..=10);
+					let rng = rand::thread_rng();
+					let snake_length = 1; //rng.gen_range(5..=10);
 					let snake_coords = gamedata().grid().random_coords(snake_length, Some(rng));
 					let mut name = request.client;
 
