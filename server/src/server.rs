@@ -265,7 +265,7 @@ impl Session {
 			exchange.assign_response(response);
 
 			gamedata().kill_dead_snakes();
-			gamedata().update_grid();
+			gamedata().update_grid()?;
 
 			if let Some(delay) = delay {
 				thread::sleep(delay);

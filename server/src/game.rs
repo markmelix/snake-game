@@ -78,10 +78,10 @@ impl GameData {
 	}
 
 	/// Refill [`game grid`](Grid) with a new data.
-	pub fn update_grid(&mut self) {
+	pub fn update_grid(&mut self) -> Result<()> {
 		let mut grid = Grid::new(self.grid.size);
 		for snake in &mut self.snakes {
-			snake.move_parts(Self::SNAKE_STEP);
+			snake.move_parts(Self::SNAKE_STEP)?;
 			for snake_part in &mut snake.parts {
 				grid.data.push(GridPoint::new(
 					GameObject::SnakePart,
@@ -98,6 +98,7 @@ impl GameData {
 			))
 		}
 		self.grid = grid;
+		Ok(())
 	}
 
 	/// Add a new snake to the game. "coords" is a coordinates of leading
@@ -116,8 +117,12 @@ impl GameData {
 		} else if self.find_snake(name.clone()) {
 			Err(Box::new(GameError::NonUniqueName(name)))
 		} else {
+			let snake = Snake::new(name, coords, direction, length);
+			for part in snake.parts.clone() {
+				println!("{}", part.coords());
+			}
 			self.snakes
-				.push(Snake::new(name, coords, direction, length));
+				.push(snake);
 			Ok(())
 		}
 	}
@@ -209,6 +214,9 @@ impl Default for GameData {
 pub struct Snake {
 	name: String,
 	parts: Vec<SnakePart>,
+
+	/// Direction of snake's leading part.
+	direction: Direction,
 }
 
 impl Snake {
@@ -220,12 +228,12 @@ impl Snake {
 		direction: Direction,
 		length: u32,
 	) -> Self {
-		let mut snake = Self {
+		Self {
 			name: name.into(),
 			parts: {
 				let mut v = vec![];
 				for i in 0..length {
-					let offset = -(length as i32 + i as i32);
+					let offset = length as i32 + i as i32;
 					let part_coords = match direction {
 						Direction::Right => (coordinates.x + offset, coordinates.y),
 						Direction::Left => (coordinates.x - offset, coordinates.y),
@@ -235,76 +243,60 @@ impl Snake {
 					.into();
 
 					let part_color = if i == length - 1 {
-						Color::RED
+						Color::new(0, 200, 0, 255)
 					} else {
 						Color::GREEN
 					};
 
-					v.push(SnakePart::new(part_coords, part_color, Direction::Right));
+					v.push(SnakePart::new(part_coords, part_color));
 				}
-				v.reverse();
 				v
 			},
-		};
-		if let Some(lp) = snake.lp_mut() {
-			lp.change_direction(direction);
+			direction,
 		}
-		snake
+	}
+
+	/// Move snake's leading part relatively to current direction on `step`
+	/// points.
+	fn step_move(&mut self, step: i32) -> Result<()> {
+		let direction = self.direction;
+		let lp = match self.lp_mut() {
+			Some(lp) => lp,
+			None => return Err(Box::new(GameError::EmptySnake(self.name.clone()))),
+		};
+		match direction {
+			Direction::Up => lp.mv((0, step)),
+			Direction::Down => lp.mv((0, -step)),
+			Direction::Left => lp.mv((-step, 0)),
+			Direction::Right => lp.mv((step, 0)),
+		}
+		Ok(())
+	}
+
+	/// Change snake's leading part direction.
+	pub fn change_direction(&mut self, direction: Direction) -> Result<()> {
+		match self.lp_mut() {
+			Some(_) => {self.direction = direction;Ok(())},
+			None => Err(Box::new(GameError::EmptySnake(self.name()))),
+		}
 	}
 
 	/// Relatively move all parts of the snake on `step` steps depending on its
 	/// leading part direction.
-	fn move_parts(&mut self, step: i32) {
+	fn move_parts(&mut self, step: i32) -> Result<()> {
 		let parts = &mut self.parts;
-		parts.reverse();
-		parts[0].step_move(step);
+
 		for i in 0..parts.len() {
-			let mut direction = None;
-			match parts.get(i + 1) {
-				Some(next_part) => {
-					direction = Some(next_part.direction);
-				},
-				None => break,
-			};
-			if let Some(direction) = direction {
-				parts[i].change_direction(direction);
-			}
+			let coords;
 			match parts.get_mut(i + 1) {
-				Some(next_part) => {
-					next_part.step_move(step);
-				},
+				Some(next_part) => coords = Some(next_part.coords()),
 				None => break,
 			};
+			parts[i].set_coords(coords.unwrap());
 		}
-		parts.reverse();
-		self.parts = parts.clone();
-	}
+		self.step_move(step)?;
 
-	/// Change direction of the snake.
-	pub fn change_direction(&mut self, direction: Direction) -> crate::Result<()> {
-		match self.lp_mut() {
-			Some(lp) => {
-				// let mut parts = self.parts.clone();
-				// let mut lp = lp.clone();
-
-				lp.change_direction(direction);
-
-				// for i in 0..parts.len() {
-				//     let mut part = parts.get(i).unwrap().clone();
-				//     match parts.get(i + 1) {
-				//         Some(next_part) => part.change_direction(next_part.direction),
-				//         None => break,
-				//     }
-				//     *parts.get_mut(i).unwrap() = part;
-				// }
-
-				// *parts.last_mut().unwrap() = lp;
-
-				// self.parts = parts;
-				Ok(())
-			}
-			None => Err(Box::new(GameError::EmptySnake(self.name()))),
-		}
+		Ok(())
 	}
 
 	/// Check if snake is alive.
@@ -352,18 +344,12 @@ impl Snake {
 struct SnakePart {
 	coordinates: Coordinates,
 	color: Color,
-	#[serde(skip)]
-	direction: Direction,
 }
 
 impl SnakePart {
 	/// Return new part of a snake with specified coordinates, color, and direction.
-	fn new(coordinates: Coordinates, color: Color, direction: Direction) -> Self {
-		Self {
-			coordinates,
-			color,
-			direction,
-		}
+	fn new(coordinates: Coordinates, color: Color) -> Self {
+		Self { coordinates, color }
 	}
 
 	/// Move part relative to current coordinates.
@@ -380,32 +366,6 @@ impl SnakePart {
 	/// ```
 	fn mv(&mut self, coordinates: impl Into<Coordinates>) {
 		self.coordinates = self.coordinates + coordinates.into();
-	}
-
-	/// Move part relatively to current direction on `step` points.
-	///
-	/// # Example
-	/// ```
-	/// // Create new part with (3, 4) coordinates.
-	/// let mut part = SnakePart::new(Coordinates::new(3, 4), Color::BLACK, Direction::Right);
-	///
-	/// // Move part relatively to its current direction on 1 point.
-	/// part.step_move(1);
-	///
-	/// assert_eq!((4, 4), part.coords());
-	/// ```
-	fn step_move(&mut self, step: i32) {
-		match self.direction {
-			Direction::Up => self.mv((0, step)),
-			Direction::Down => self.mv((0, -step)),
-			Direction::Left => self.mv((-step, 0)),
-			Direction::Right => self.mv((step, 0)),
-		}
-	}
-
-	/// Change part direction.
-	fn change_direction(&mut self, direction: Direction) {
-		self.direction = direction;
 	}
 
 	/// Return part coordinates.
@@ -676,7 +636,11 @@ pub mod grid {
 		/// `rng` is a random number generator, if it's `None`, then it's
 		/// initialized automatically. This argument may be used if you have
 		/// `rng` already initialized and you don't want to initialize it again.
-		pub fn random_coords(&self, offset: usize, rng: Option<rand::prelude::ThreadRng>) -> Coordinates {
+		pub fn random_coords(
+			&self,
+			offset: usize,
+			rng: Option<rand::prelude::ThreadRng>,
+		) -> Coordinates {
 			let mut rng = rng.unwrap_or_default();
 			Coordinates::new(
 				rng.gen_range(1 + offset..=self.size.0 - offset) as i32,
