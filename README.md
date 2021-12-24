@@ -10,7 +10,7 @@ write your own (and not even necessarily on Rust!) one!
 ### Server todos
 - [x] Generate random coordinates of a new snake depending on all parts
 - [ ] Get rid of most `unwrap`s and replace them with error handling
-- [ ] Fix snake change direction algorithm
+- [x] Fix snake change direction algorithm
 - [ ] Make library more comfortable to be used by clients
 - [ ] Create library bindings for Python
 - [ ] Refactor to make the library more flexible (create traits)
