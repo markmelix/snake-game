@@ -670,13 +670,17 @@ pub mod grid {
 			}
 		}
 
-		/// Return random coordinates fitting in the grid. Add offset to each
-		/// randomly generated value, may be set to 0.
-		pub fn random_coords(&self, offset: i32) -> Coordinates {
-			let mut rng = rand::thread_rng();
+		/// Generate random coordinates in range from (1 + `offset`) inclusively
+		/// to (grid size - `offset`) exclusively and return them.
+		///
+		/// `rng` is a random number generator, if it's `None`, then it's
+		/// initialized automatically. This argument may be used if you have
+		/// `rng` already initialized and you don't want to initialize it again.
+		pub fn random_coords(&self, offset: usize, rng: Option<rand::prelude::ThreadRng>) -> Coordinates {
+			let mut rng = rng.unwrap_or_default();
 			Coordinates::new(
-				rng.gen_range(1..=self.size.0) as i32 + offset,
-				rng.gen_range(1..=self.size.1) as i32 + offset,
+				rng.gen_range(1 + offset..=self.size.0 - offset) as i32,
+				rng.gen_range(1 + offset..=self.size.1 - offset) as i32,
 			)
 		}
 

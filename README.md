@@ -8,7 +8,7 @@ write your own (and not even necessarily on Rust!) one!
 
 ## TODO list
 ### Server todos
-- [ ] Generate random coordinates of a new snake depending on all parts
+- [x] Generate random coordinates of a new snake depending on all parts
 - [ ] Get rid of most `unwrap`s and replace them with error handling
 - [ ] Fix snake change direction algorithm
 - [ ] Make library more comfortable to be used by clients

@@ -208,7 +208,9 @@ impl Session {
 
 			let response = match request.kind {
 				RequestKind::Connect => {
-					let snake_coords = gamedata().grid().random_coords(0);
+					let mut rng = rand::thread_rng();
+					let snake_length = rng.gen_range(5..=10);
+					let snake_coords = gamedata().grid().random_coords(snake_length + 5, Some(rng));
 					let mut name = request.client;
 
 					// Check whether there is already a snake with such name and
@@ -226,7 +228,7 @@ impl Session {
 							name,
 							snake_coords,
 							Direction::Right,
-							rand::thread_rng().gen_range(5..=10),
+							snake_length as u32,
 						),
 					)
 				}
