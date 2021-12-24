@@ -6,6 +6,24 @@ Note that you aren't force to use exactly client provided by this
 repository. You can use any client which is supported by the server or even
 write your own (and not even necessarily on Rust!) one!
 
+## TODO list
+### Server todos
+- [ ] Generate random coordinates of a new snake depending on all parts
+- [ ] Get rid of most `unwrap`s and replace them with error handling
+- [ ] Fix snake change direction algorithm
+- [ ] Make library more comfortable to be used by clients
+- [ ] Create library bindings for Python
+- [ ] Refactor to make the library more flexible (create traits)
+- [ ] Optimize algorithms and make server more fast
+- [ ] Document specifications for clients
+
+### Official client todos
+- [ ] Get rid of most `unwrap`s and replace them with the error handling
+- [ ] Make GUI more beautiful
+- [ ] Add some information into GUI to make client more informative
+- [ ] Look for more elegant and comfortable GUI library and move in it
+- [ ] Make game more smooth
+
 ## How to play
 After you clone this repository, launch the server:
 ```bash
