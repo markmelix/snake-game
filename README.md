@@ -17,6 +17,11 @@ write your own (and not even necessarily on Rust!) one!
 - [ ] Optimize algorithms and make server more fast
 - [ ] Document specifications for clients
 
+### Logger todos
+- [ ] Implement logger library which will contain everything other libraries in
+	  this project may need for logging. Now logging are implemented by server
+	  itself using `log` and `env_logger` crates
+
 ### Official client todos
 - [ ] Get rid of most `unwrap`s and replace them with the error handling
 - [ ] Make GUI more beautiful
