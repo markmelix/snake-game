@@ -9,7 +9,7 @@ use crate::{
 	game::{Direction, GameData},
 	Result,
 };
-use rand::Rng;
+//use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::net::{TcpListener, TcpStream, ToSocketAddrs};
 use std::{
@@ -100,7 +100,7 @@ fn handle_client(
 		}
 	}
 
-	let mut gamedata = gamedata.lock().unwrap();
+	let mut gamedata = gamedata.lock().expect("acquiring gamedata mutex");
 
 	if let Some(exchange) = session.exchanges().first() {
 		let name = exchange.request().client;
@@ -175,7 +175,7 @@ impl Session {
 	/// Handle all uncompleted requests.
 	fn handle_requests(&mut self) -> Result<()> {
 		let mut is_connection_request = false;
-		let mut stream = self.stream.try_clone().unwrap();
+		let mut stream = self.stream.try_clone()?;
 		let gamedata = self.gamedata.clone();
 		let delay = self.delay;
 		let last_direction = self
@@ -204,7 +204,7 @@ impl Session {
 
 			// Lazily acquire gamedata mutex to work with it on a fly without
 			// boilerplate code.
-			let gamedata = || gamedata.lock().unwrap();
+			let gamedata = || gamedata.lock().expect("acquiring gamedata mutex");
 
 			let response = match request.kind {
 				RequestKind::Connect => {
@@ -357,8 +357,8 @@ impl Request {
 	}
 
 	/// Convert [`Request`] to bytes.
-	pub fn as_bytes(&self) -> Vec<u8> {
-		self.to_string().unwrap().as_bytes().to_vec()
+	pub fn as_bytes(&self) -> Result<Vec<u8>> {
+		Ok(self.to_string()?.as_bytes().to_vec())
 	}
 
 	/// Convert bytes to [`Vec<Request>`].
@@ -392,7 +392,7 @@ impl Request {
 	/// Write request to [`TcpStream`] after writing one null character to make
 	/// splitting multiple json requests possible.
 	pub fn write(&self, stream: &mut TcpStream) -> Result<()> {
-		stream.write(&self.as_bytes())?;
+		stream.write(&self.as_bytes()?)?;
 		stream.write(&[0; 4])?;
 		Ok(())
 	}

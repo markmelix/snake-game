@@ -96,7 +96,14 @@ fn init_settings(matches: clap::ArgMatches) -> Settings {
 				let mut split = val
 					.split('x')
 					.map(|x| x.parse::<usize>().expect("Parsing grid size argument"));
-				(split.next().unwrap(), split.next().unwrap())
+				(
+					split
+						.next()
+						.expect("There should be two values separated with 'x'"),
+					split
+						.next()
+						.expect("There should be two values separated with 'x'"),
+				)
 			}
 			None => GameData::DEFAULT_GRID_SIZE,
 		},
