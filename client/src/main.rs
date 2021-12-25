@@ -4,16 +4,13 @@
 use clap::{App as CliApp, Arg};
 use eframe::{
 	egui::{self, epaint},
-	epi::{self, App as GuiApp},
+	epi,
 };
 use snake_game::{
 	game::{self, Grid},
-	server,
+	server::Client,
 };
-use std::{
-	io::{Read, Write},
-	net::TcpStream,
-};
+use std::net::TcpStream;
 
 fn main() {
 	let matches = CliApp::new("Snake Game Client by Mark")
@@ -39,18 +36,18 @@ fn main() {
 	let client_name = matches.value_of("client_name").map(|val| val.to_string());
 	let make_connection = matches.is_present("connect");
 
-	let client = Client::new(client_name, server_address, make_connection);
+	let app = GuiApp::new(client_name, server_address, make_connection);
 	let native_options = eframe::NativeOptions::default();
 
-	eframe::run_native(Box::new(client), native_options);
+	eframe::run_native(Box::new(app), native_options);
 }
 
-pub struct Client {
-	/// Client name (snake name).
-	name: Option<String>,
+pub struct GuiApp {
+	/// Client id.
+	id: Option<String>,
 
-	/// Initial client name.
-	initial_name: Option<String>,
+	/// Initial client id.
+	initial_id: Option<String>,
 
 	/// Server address.
 	address: Option<String>,
@@ -64,46 +61,45 @@ pub struct Client {
 	/// Server stream.
 	stream: Option<TcpStream>,
 
-	/// Game grid which updates using GameData update_grid method.
+	/// Game grid.
 	grid: Option<Grid>,
 }
 
-impl Client {
+impl Client for GuiApp {
+	fn set_stream(&mut self, stream: Option<TcpStream>) {
+		self.stream = stream;
+	}
+
+	fn stream(&mut self) -> Option<&mut TcpStream> {
+		self.stream.as_mut()
+	}
+
+	fn stream_clone(&self) -> Option<TcpStream> {
+		self.stream.as_ref().map(|stream| stream.try_clone().unwrap())
+	}
+
+	fn set_id(&mut self, id: Option<String>) {
+		self.id = id
+	}
+
+	fn id(&self) -> Option<String> {
+		self.id.clone()
+	}
+}
+
+impl GuiApp {
 	/// Return a new [`Client`]
-	fn new(name: Option<String>, address: Option<String>, make_connection: bool) -> Self
+	fn new(id: Option<String>, address: Option<String>, make_connection: bool) -> Self
 where {
 		Self {
-			initial_name: name.clone(),
-			name,
+			initial_id: id.clone(),
+			id,
 			address,
 			make_connection,
 			connection_status: String::new(),
 			stream: None,
 			grid: None,
 		}
-	}
-
-	/// Return cloned [`TcpStream`].
-	fn stream(&self) -> TcpStream {
-		self.stream.as_ref().unwrap().try_clone().unwrap()
-	}
-
-	/// Request grid from the server. Should be ran only after sending
-	/// connection request to the server.
-	fn request_grid(&mut self) -> snake_game::Result<Grid> {
-		let mut buffer = [0; 1024 * 10];
-
-		let mut stream = self.stream();
-
-		server::Request::new(self.name.clone().unwrap(), server::RequestKind::GetGrid)
-			.write(&mut stream)
-			.unwrap();
-
-		stream.read(&mut buffer)?;
-
-		let string = String::from_utf8_lossy(&buffer);
-
-		game::Grid::from_string(&string.trim_matches(char::from(0)))
 	}
 
 	/// Disconnect from the server.
@@ -113,16 +109,13 @@ where {
 	/// server buffer has failed.
 	fn disconnect(&mut self) {
 		self.make_connection = false;
-
-		let mut stream = self.stream();
-
-		server::Request::new(self.name.clone().unwrap(), server::RequestKind::Disconnect)
-			.write(&mut stream)
-			.unwrap();
-
-		stream.flush().expect("flushing the stream");
-		self.stream = None;
-		self.connection_status = String::from("Disconnected");
+		match <Self as Client>::disconnect(self) {
+			Ok(_) => {
+				self.stream = None;
+				self.connection_status = String::from("Disconnected")
+			},
+			Err(e) => self.connection_status = format!("Error: {}", e),
+		}
 	}
 
 	/// Connect to the server.
@@ -130,26 +123,11 @@ where {
 	/// # Panic
 	/// Panics if `self.address` or `self.name` is none.
 	fn connect(&mut self) {
+		let address = self.address.clone().unwrap();
 		self.make_connection = false;
-		match server::connect(self.address.clone().unwrap(), self.name.clone().unwrap()) {
-			Ok(mut stream) => {
-				let mut buffer = [0; 1024 * 10];
-
-				if let Err(e) = stream.read(&mut buffer) {
-					self.connection_status = format!("Error while reading client name: {}", e);
-				};
-
-				let name = String::from_utf8_lossy(&buffer);
-				let trim_pattern: &[_] = &[char::from(0), '"'];
-				let name = name.trim_matches(trim_pattern).to_string();
-
-				self.name = Some(name);
-				self.connection_status = String::from("Success");
-				self.stream = Some(stream);
-			}
-			Err(e) => {
-				self.connection_status = format!("Error: {}", e);
-			}
+		match <Self as Client>::connect(self, address) {
+			Ok(_) => self.connection_status = String::from("Success"),
+			Err(e) => self.connection_status = format!("Error: {}", e),
 		}
 	}
 
@@ -160,7 +138,7 @@ where {
 	}
 }
 
-impl GuiApp for Client {
+impl epi::App for GuiApp {
 	fn name(&self) -> &str {
 		"Snake Game by Mark"
 	}
@@ -185,7 +163,7 @@ impl GuiApp for Client {
 					Some(val) => val,
 					None => String::new(),
 				};
-				let mut initial_name = match self.initial_name.clone() {
+				let mut initial_id = match self.initial_id.clone() {
 					Some(val) => val,
 					None => String::new(),
 				};
@@ -195,10 +173,10 @@ impl GuiApp for Client {
 				self.address = Some(address);
 
 				ui.label("Player name:");
-				ui.text_edit_singleline(&mut initial_name);
+				ui.text_edit_singleline(&mut initial_id);
 
-				self.initial_name = Some(initial_name.clone());
-				self.name = Some(initial_name);
+				self.initial_id = Some(initial_id.clone());
+				self.id = Some(initial_id);
 
 				if ui.button("Connect").clicked() || ctx.input().key_pressed(egui::Key::Enter) {
 					self.connection_status = String::from("Try connecting to server");
@@ -269,36 +247,14 @@ impl GuiApp for Client {
 			});
 			ctx.request_repaint();
 
-			let mut stream = self.stream();
-
 			if ctx.input().key_pressed(egui::Key::W) {
-				server::Request::new(
-					self.name.clone().unwrap(),
-					server::RequestKind::ChangeDirection(game::Direction::Up),
-				)
-				.write(&mut stream)
-				.unwrap();
+				self.change_direction(game::Direction::Up).unwrap();
 			} else if ctx.input().key_pressed(egui::Key::S) {
-				server::Request::new(
-					self.name.clone().unwrap(),
-					server::RequestKind::ChangeDirection(game::Direction::Down),
-				)
-				.write(&mut stream)
-				.unwrap();
+				self.change_direction(game::Direction::Down).unwrap();
 			} else if ctx.input().key_pressed(egui::Key::A) {
-				server::Request::new(
-					self.name.clone().unwrap(),
-					server::RequestKind::ChangeDirection(game::Direction::Left),
-				)
-				.write(&mut stream)
-				.unwrap();
+				self.change_direction(game::Direction::Left).unwrap();
 			} else if ctx.input().key_pressed(egui::Key::D) {
-				server::Request::new(
-					self.name.clone().unwrap(),
-					server::RequestKind::ChangeDirection(game::Direction::Right),
-				)
-				.write(&mut stream)
-				.unwrap();
+				self.change_direction(game::Direction::Right).unwrap();
 			} else if ctx.input().key_pressed(egui::Key::R) {
 				self.reconnect();
 			} else if ctx.input().key_pressed(egui::Key::Escape) {

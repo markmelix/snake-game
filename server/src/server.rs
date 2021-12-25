@@ -1,15 +1,111 @@
 //! Game server module.
 //!
-//! Clients written on Rust should use this module to be implemented.
+//! # Communication between server and client
+//! Server uses TCP/IP protocol for communications. When it's launched, it
+//! starts waiting for requests from [`TcpStream`].
 //!
-//! Clients written on other languages should generate binary json depending on
-//! [`Request`] struct.
+//! Request is a binary json string with special format specified by request's
+//! structure.
+//!
+//! When server gets raw request in binary json format, it converts it into
+//! abstracted request structure and does something depending on its kind.
+//!
+//! After server does everything it was asked for, it generates response with a
+//! request its [`Result`] contained. This response converts into raw
+//! binary json and sends back into the [`stream`](TcpStream).
+//!
+//! # Specification for clients
+//! How every client should communicate with server in short:
+//! 1. Client writes connection request to server's stream
+//! 2. Client reads server's stream for its name in json format
+//! 3. Client sends requests to get game grid and reads server's stream for it
+//! 4. Client may send requests to change snake direction
+//! 5. Client sends disconnection request to server's stream
+//!
+//! ## Implementing own client on Rust
+//! If you write your client on Rust, then get familiar with [`Client`] trait
+//! and implement it for your client abstraction and use related methods to do
+//! things presented above.
+//!
+//! ## Implementing own client on another language
+//! If you write your client on another language or you want to implement it on
+//! Rust without this library or you just want to get how it works, then read
+//! this section to know how to send or read requests in a right way and work
+//! with the server without any helpers.
+//!
+//! If you just want to create a client, you can read only **Request** section
+//! below. But if you want to know almost everything about server working
+//! algorithm, read further sections.
+//!
+//! ### Request
+//! Request is a binary json data with a special format. Every request has a
+//! kind (connect, disconnect, get grid and so on) and unique identifier of a
+//! client which sends it.
+//!
+//! There should also be put four null bytes after every request to allow server
+//! splitting many requests in a read.
+//!
+//! #### Request to connect
+//! ```json
+//! {
+//!     "client": "client identifier",
+//!     "kind": "connect"
+//! }
+//! ```
+//! This request should be sent at first and only once to authorize a client.
+//!
+//! After this request client should read server's stream for json string
+//! containing its accepted identifier. Server will send something like this:
+//! ```json
+//! "client identifier"
+//! ```
+//!
+//! #### Request to get game grid
+//! ```json
+//! {
+//!     "client": "client identifier",
+//!     "kind": "get_grid"
+//! }
+//! ```
+//! This request should be sent constantly to get game grid.
+//!
+//! ### Request to change snake's direction
+//! ```json
+//! {
+//!     "client": "client identifier",
+//!     "kind": {
+//!         "change_direction": "right"
+//!     }
+//! }
+//! ```
+//! This request should be sent constantly to get game grid.
+//! There "change_direction" can have "up", "down", "left" or "right" values.
+//!
+//! #### Request to connect
+//! ```json
+//! {
+//!     "client": "client identifier",
+//!     "kind": "disconnect"
+//! }
+//! ```
+//! This request should be sent at last and only once to deauthorize the client.
+//!
+//! ### Response
+//! Response is a result of processing a request.
+//!
+//! ### Exchange
+//! Exchange is a request linked with its response. If there's no response
+//! linked, then exchange is called *uncompleted*. Otherwise exchange is called
+//! *completed*. Vector/Stack/Array/Pool of exchanges is named *exchange pool*.
+//!
+//! ### Session
+//! When client connects to the server, a session is started. Session is a
+//! structure which contains exchange pool and server options.
 
 use crate::{
-	game::{Direction, GameData},
+	game::{Direction, GameData, Grid},
 	Result,
 };
-//use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::net::{TcpListener, TcpStream, ToSocketAddrs};
 use std::{
@@ -24,21 +120,95 @@ use std::{
 /// Default delay between every server response.
 pub const GAME_DELAY: Duration = Duration::from_millis(50);
 
-/// Connect to the server with specified address. `client` is a name of the
-/// snake.
-pub fn connect<A: ToSocketAddrs + Debug>(
-	address: A,
-	client: impl Into<String>,
-) -> Result<TcpStream> {
-	match TcpStream::connect(&address) {
-		Ok(mut stream) => {
-			Request::new(client.into(), RequestKind::Connect)
-				.write(&mut stream)
-				.expect("writing to the server stream");
-			Ok(stream)
+/// Trait which should be implemented for client abstractions.
+pub trait Client {
+	/// Connect to the server with specified address. `client` is a name of the
+	/// snake. Return stream and client name taken from server connection response.
+	fn connect<A: ToSocketAddrs + Debug>(&mut self, address: A) -> Result<()> {
+		match TcpStream::connect(&address) {
+			Ok(stream) => {
+				self.set_stream(Some(stream));
+				Request::new(self.id().unwrap(), RequestKind::Connect)
+					.write(self.stream().unwrap())
+					.expect("writing to the server stream");
+
+				self.read_client_id()?;
+
+				Ok(())
+			}
+			Err(e) => Err(Box::new(e)),
 		}
-		Err(e) => Err(Box::new(e)),
 	}
+
+	/// Parse client id after reading stream after connection request.
+	///
+	/// This function should be used to parse returned by server client's id
+	/// value after connection request.
+	fn read_client_id(&mut self) -> Result<()> {
+		let mut buffer = [0; 1024 * 10];
+		self.stream().unwrap().read(&mut buffer).unwrap();
+
+		let name = String::from_utf8_lossy(&buffer);
+		let trim_pattern: &[_] = &[char::from(0), '"'];
+
+		self.set_id(Some(name.trim_matches(trim_pattern).to_string()));
+
+		Ok(())
+	}
+
+	/// Send request to get game grid to server's stream, read for it and return
+	/// read value.
+	fn request_grid(&mut self) -> Result<Grid> {
+		let id = self.id().unwrap();
+		let stream = self.stream().unwrap();
+
+		Request::new(id, RequestKind::GetGrid).write(stream)?;
+
+		let mut buffer = [0; 1024 * 10];
+
+		stream.read(&mut buffer)?;
+
+		let string = String::from_utf8_lossy(&buffer);
+
+		Grid::from_string(&string.trim_matches(char::from(0)))
+	}
+
+	/// Send request to disconnect from the server.
+	fn disconnect(&mut self) -> Result<()> {
+		let id = self.id().unwrap();
+		let stream = self.stream().unwrap();
+
+		Request::new(id, RequestKind::Disconnect).write(stream)?;
+
+		stream.flush()?;
+
+		Ok(())
+	}
+
+	/// Send request to change snake's direction.
+	fn change_direction(&mut self, direction: Direction) -> Result<()> {
+		Request::new(
+			self.id().unwrap(),
+			RequestKind::ChangeDirection(direction),
+		)
+		.write(self.stream().unwrap())?;
+		Ok(())
+	}
+
+	/// Set client's stream.
+	fn set_stream(&mut self, stream: Option<TcpStream>);
+
+	/// Return mutable reference to [`server stream`](TcpStream).
+	fn stream(&mut self) -> Option<&mut TcpStream>;
+
+	/// Return cloned [`server stream`](TcpStream).
+	fn stream_clone(&self) -> Option<TcpStream>;
+
+	/// Set client's identifier.
+	fn set_id(&mut self, id: Option<String>);
+
+	/// Return client's identifier.
+	fn id(&self) -> Option<String>;
 }
 
 /// Run server with specified address and [`GameData`].
@@ -343,26 +513,29 @@ impl Session {
 /// Server request abstraction.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub struct Request {
-	/// Client name.
+struct Request {
+	/// Client identifier.
 	client: String,
 	/// Kind of request to send.
 	kind: RequestKind,
 }
 
 impl Request {
-	/// Return new [`Request`]
-	pub fn new(client: String, kind: RequestKind) -> Self {
-		Self { client, kind }
+	/// Return a new [`Request`]
+	fn new(client: impl Into<String>, kind: RequestKind) -> Self {
+		Self {
+			client: client.into(),
+			kind,
+		}
 	}
 
 	/// Convert [`Request`] to bytes.
-	pub fn as_bytes(&self) -> Result<Vec<u8>> {
+	fn as_bytes(&self) -> Result<Vec<u8>> {
 		Ok(self.to_string()?.as_bytes().to_vec())
 	}
 
 	/// Convert bytes to [`Vec<Request>`].
-	pub fn from_bytes(b: &[u8]) -> Result<Vec<Self>> {
+	fn from_bytes(b: &[u8]) -> Result<Vec<Self>> {
 		let mut requests = vec![];
 		let string = String::from_utf8_lossy(b);
 		let string = string.trim_matches(char::from(0));
@@ -376,12 +549,12 @@ impl Request {
 	}
 
 	/// Convert [`Request`] to json string.
-	pub fn to_string(&self) -> Result<String> {
+	fn to_string(&self) -> Result<String> {
 		Ok(serde_json::to_string(self)?)
 	}
 
 	/// Convert json string to [`Request`].
-	pub fn from_string<T: AsRef<str>>(string: T) -> Result<Self> {
+	fn from_string<T: AsRef<str>>(string: T) -> Result<Self> {
 		Ok(serde_json::from_str(
 			string.as_ref().trim_matches(char::from(0)),
 		)?)
@@ -389,16 +562,16 @@ impl Request {
 
 	/// Send request to server.
 	///
-	/// Write request to [`TcpStream`] after writing one null character to make
-	/// splitting multiple json requests possible.
-	pub fn write(&self, stream: &mut TcpStream) -> Result<()> {
+	/// Write request to [`TcpStream`] after writing four null characters to
+	/// make splitting multiple json requests possible.
+	fn write(&self, stream: &mut TcpStream) -> Result<()> {
 		stream.write(&self.as_bytes()?)?;
 		stream.write(&[0; 4])?;
 		Ok(())
 	}
 
 	/// Return client name.
-	pub fn client(&self) -> String {
+	fn client(&self) -> String {
 		self.client.clone()
 	}
 }
@@ -406,13 +579,16 @@ impl Request {
 /// Enum of server request kinds.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum RequestKind {
+enum RequestKind {
 	/// Request to connect to server.
 	Connect,
+
 	/// Request to disconnect from server.
 	Disconnect,
+
 	/// Request to get game grid.
 	GetGrid,
+
 	/// Request to change snake direction on the provided one.
 	ChangeDirection(Direction),
 }
@@ -512,8 +688,8 @@ impl Exchange {
 pub enum ServerError {
 	/// Client is trying to be handled without being authorized.
 	///
-	/// Every client should send [`connection`](RequestKind::Connect)
-	/// [`request`](Request) before being handled to be authorized by server.
+	/// Every client should send connection request before being handled to be
+	/// authorized by server.
 	IsNotConnected,
 
 	/// Client is sending nothing besides null characters.

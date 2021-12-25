@@ -16,14 +16,14 @@ should be refactored and updated a lot.
 ### Server todos
 - [x] Generate random coordinates of a new snake depending on all parts
 - [x] Fix snake change direction algorithm
-- [x] Get rid of most `unwrap`s and replace them with error handling
-- [ ] Document specifications for clients
+- [x] Document specifications for clients
+- [x] Refactor to make the library more flexible (create traits)
+- [ ] Get rid of most `unwrap`s and replace them with error handling
 - [ ] Add more abilities to setup server. For instance, add ability to control
 	  what color and length will snakes have after being spawned
 - [ ] Implement server console with admin features
-- [ ] Refactor to make the library more flexible (create traits)
-- [ ] Optimize algorithms and make server more fast
 - [ ] Create library bindings for Python
+- [ ] Optimize algorithms and make server more fast
 
 ### Logger todos
 - [ ] Implement logger library which will contain everything other libraries in
