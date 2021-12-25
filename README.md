@@ -27,7 +27,7 @@ should be refactored and updated a lot.
 
 ### Logger todos
 - [ ] Implement logger library which will contain everything other libraries in
-	  this project that may be needed for logging. Now logging are implemented
+	  this project may need for logging. Now logging are implemented
 	  by server itself using `log` and `env_logger` crates
 
 ### Official client todos
