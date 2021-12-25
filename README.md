@@ -18,6 +18,7 @@ should be refactored and updated a lot.
 - [x] Fix snake change direction algorithm
 - [x] Document specifications for clients
 - [x] Refactor to make the library more flexible (create traits)
+- [ ] Implement apples
 - [ ] Get rid of most `unwrap`s and replace them with error handling
 - [ ] Add more abilities to setup server. For instance, add ability to control
 	  what color and length will snakes have after being spawned
