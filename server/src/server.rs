@@ -117,8 +117,14 @@ use std::{
 	time::Duration,
 };
 
+/// How many bytes one character is.
+const CHAR: usize = std::mem::size_of::<char>();
+
 /// How many bytes client can read from a stream at a time.
-const READ_LIMIT: usize = 1024 * 10;
+const READ_LIMIT: usize = 1024 * 4 * CHAR;
+
+/// How many bytes can have client id.
+const CLIENT_ID_LIMIT: usize = 64 * CHAR;
 
 /// Default delay between every server response.
 pub const GAME_DELAY: Duration = Duration::from_millis(70);
@@ -148,7 +154,7 @@ pub trait Client {
 	/// This function should be used to parse returned by server client's id
 	/// value after connection request.
 	fn read_client_id(&mut self) -> Result<()> {
-		let mut buffer = [0; READ_LIMIT];
+		let mut buffer = [0; CLIENT_ID_LIMIT];
 		self.stream().unwrap().read(&mut buffer).unwrap();
 
 		let name = String::from_utf8_lossy(&buffer);
@@ -190,11 +196,8 @@ pub trait Client {
 
 	/// Send request to change snake's direction.
 	fn change_direction(&mut self, direction: Direction) -> Result<()> {
-		Request::new(
-			self.id().unwrap(),
-			RequestKind::ChangeDirection(direction),
-		)
-		.write(self.stream().unwrap())?;
+		Request::new(self.id().unwrap(), RequestKind::ChangeDirection(direction))
+			.write(self.stream().unwrap())?;
 		Ok(())
 	}
 
@@ -465,9 +468,11 @@ impl Session {
 				_ => (),
 			}
 		}
+
 		if !self.connected && is_connection_request {
 			self.connected = true
 		}
+
 		Ok(())
 	}
 
