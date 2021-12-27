@@ -1,5 +1,7 @@
 //! Snake game library.
 //!
+//! See [`server`] module for detailed infomation about 'server <=> client'
+//! communication.
 
 #![warn(missing_docs)]
 //#![warn(missing_doc_code_examples)]
