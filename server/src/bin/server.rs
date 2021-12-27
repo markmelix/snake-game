@@ -133,7 +133,7 @@ fn init_settings(matches: clap::ArgMatches) -> Settings {
 				.into(),
 			None => server::GAME_DELAY,
 		},
-		snake_inc_size: match matches.value_of("inc_size") {
+		snake_inc_size: match matches.value_of("snake_inc_size") {
 			Some(val) => val.parse::<usize>().expect("Parsing snake increment size argument"),
 			None => GameData::SNAKE_INCREMENT_SIZE,
 		}
