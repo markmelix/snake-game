@@ -229,6 +229,17 @@ pub fn run<A: ToSocketAddrs>(
 	let gamedata = Arc::new(Mutex::new(gamedata));
 	let game_delay = game_delay.map_or(GAME_DELAY, |d| d);
 
+	let gamedata_clone = gamedata.clone();
+	thread::Builder::new().name("GameData handler".into()).spawn(move || {
+		let gamedata = || gamedata_clone.lock().expect("acquiring mutex lock");
+		loop {
+			gamedata().kill_dead_snakes();
+			gamedata().check_apples().expect("checking apples");
+			gamedata().update_grid().expect("updating game grid");
+			thread::sleep(game_delay);
+		}
+	})?;
+
 	loop {
 		let (socket, address) = match listener.accept() {
 			Ok(val) => val,
@@ -238,12 +249,12 @@ pub fn run<A: ToSocketAddrs>(
 			}
 		};
 		let gamedata = gamedata.clone();
-		thread::spawn(
-			move || match handle_client(socket, gamedata, Some(game_delay)) {
+		thread::Builder::new().name(format!("{}'s handler", address)).spawn(
+			move || match handle_client(socket, gamedata) {
 				Ok(_) => log::info!("Successfully handled client {}", address),
 				Err(e) => log::error!("Failed to handle client \"{}\": {}", address, e),
 			},
-		);
+		)?;
 	}
 }
 
@@ -253,9 +264,8 @@ pub fn run<A: ToSocketAddrs>(
 fn handle_client(
 	stream: TcpStream,
 	gamedata: Arc<Mutex<GameData>>,
-	delay: Option<Duration>,
 ) -> Result<()> {
-	let mut session = Session::new(stream, gamedata.clone(), delay);
+	let mut session = Session::new(stream, gamedata.clone());
 
 	loop {
 		if session.wait().is_err() {
@@ -303,22 +313,18 @@ struct Session {
 	/// Is client connected to server or not.
 	connected: bool,
 
-	/// Delay between every request, it may be used to slow down the game.
-	delay: Option<Duration>,
-
 	/// `exchanges` is just a vector of server requests linked with responses.
 	exchanges: Vec<Exchange>,
 }
 
 impl Session {
 	/// Return a new empty [`Session`].
-	fn new(stream: TcpStream, gamedata: Arc<Mutex<GameData>>, delay: Option<Duration>) -> Self {
+	fn new(stream: TcpStream, gamedata: Arc<Mutex<GameData>>) -> Self {
 		Self {
 			stream,
 			gamedata,
 			client: None,
 			connected: false,
-			delay,
 			exchanges: vec![],
 		}
 	}
@@ -353,7 +359,6 @@ impl Session {
 		let mut is_connection_request = false;
 		let mut stream = self.stream.try_clone()?;
 		let gamedata = self.gamedata.clone();
-		let delay = self.delay;
 		let last_direction = self
 			.exchanges()
 			.iter()
@@ -439,14 +444,6 @@ impl Session {
 			}
 
 			exchange.assign_response(response);
-
-			gamedata().kill_dead_snakes();
-			gamedata().check_apples()?;
-			gamedata().update_grid()?;
-
-			if let Some(delay) = delay {
-				thread::sleep(delay);
-			}
 
 			match request.kind {
 				RequestKind::Connect => {
