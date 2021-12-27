@@ -13,18 +13,22 @@ pub struct GameData {
 	grid: Grid,
 	snakes: Vec<Snake>,
 	apples: Vec<Apple>,
+	snake_increment_size: usize,
 }
 
 impl GameData {
 	/// Default size of the [`game grid`](Grid). Used when one isn't provided to the [`new`](Self::new)
 	/// function or in the [`Default`](Self::default) implementation.
-	pub const DEFAULT_GRID_SIZE: (usize, usize) = Grid::DEFAULT_SIZE;
+	pub const GRID_SIZE: (usize, usize) = Grid::DEFAULT_SIZE;
 
 	/// Recommended maximum number of snakes in the game.
-	pub const RECOMMENDED_SNAKES_AMOUNT: usize = 5;
+	pub const SNAKES_AMOUNT: usize = 5;
 
 	/// Recommended maximum number of apples in the game.
-	pub const RECOMMENDED_APPLES_AMOUNT: usize = 5;
+	pub const APPLES_AMOUNT: usize = 1;
+
+	/// Recommended snake increment size when it eats an apple.
+	pub const SNAKE_INCREMENT_SIZE: usize = 1;
 
 	/// Default snake step. Should be changed only with purpose of fun.
 	const SNAKE_STEP: i32 = 1;
@@ -41,11 +45,12 @@ impl GameData {
 		grid_size: Option<(usize, usize)>,
 		snakes_max_amount: Option<usize>,
 		apples_max_amount: Option<usize>,
+		snake_increment_size: Option<usize>,
 	) -> Self {
 		Self {
 			grid: match grid_size {
 				Some(val) => Grid::new(val),
-				None => Grid::new(Self::DEFAULT_GRID_SIZE),
+				None => Grid::new(Self::GRID_SIZE),
 			},
 			snakes: match snakes_max_amount {
 				Some(val) => Vec::with_capacity(val),
@@ -54,6 +59,10 @@ impl GameData {
 			apples: match apples_max_amount {
 				Some(val) => Vec::with_capacity(val),
 				None => Vec::new(),
+			},
+			snake_increment_size: match snake_increment_size {
+				Some(val) => val,
+				None => Self::SNAKE_INCREMENT_SIZE,
 			},
 		}
 	}
@@ -77,9 +86,16 @@ impl GameData {
 		}
 	}
 
-	/// Refill [`game grid`](Grid) with a new data.
+	/// Refill [`game grid`](Grid) with a new data and move all snakes.
 	pub fn update_grid(&mut self) -> Result<()> {
 		let mut grid = Grid::new(self.grid.size);
+		for apple in &self.apples {
+			grid.data.push(GridPoint::new(
+				GameObject::Apple,
+				apple.coords(),
+				Color::RED,
+			))
+		}
 		for snake in &mut self.snakes {
 			snake.move_parts(Self::SNAKE_STEP)?;
 			for snake_part in &mut snake.parts {
@@ -89,13 +105,6 @@ impl GameData {
 					snake_part.color(),
 				));
 			}
-		}
-		for apple in &self.apples {
-			grid.data.push(GridPoint::new(
-				GameObject::Apple,
-				apple.coords(),
-				Color::RED,
-			))
 		}
 		self.grid = grid;
 		Ok(())
@@ -113,16 +122,12 @@ impl GameData {
 		let capacity = self.snakes.capacity();
 		let name = name.into();
 		if capacity != 0 && capacity == self.snakes.len() {
-			Err(Box::new(GameError::TooMuchSnakes))
+			Err(Box::new(GameError::TooMuchSnakes(name)))
 		} else if self.find_snake(name.clone()) {
 			Err(Box::new(GameError::NonUniqueName(name)))
 		} else {
-			let snake = Snake::new(name, coords, direction, length);
-			for part in snake.parts.clone() {
-				println!("{}", part.coords());
-			}
 			self.snakes
-				.push(snake);
+				.push(Snake::new(name, coords, direction, length));
 			Ok(())
 		}
 	}
@@ -134,6 +139,38 @@ impl GameData {
 			Some(index) => Ok(self.snakes.remove(index)),
 			None => Err(Box::new(GameError::SnakeNotFound(name))),
 		}
+	}
+
+	/// Checks whether apples were eaten by snakes and if yes, increment number
+	/// of their parts on `Self::snake_increment_size` ones and delete apples
+	/// which were eaten. Spawn new apples if there're not any apples in the
+	/// game.
+	pub fn check_apples(&mut self) -> Result<()> {
+		let mut delete_apples = Vec::with_capacity(self.apples.capacity());
+
+		for snake in &mut self.snakes {
+			if let Some(lp) = snake.lp() {
+				let lp = lp.clone();
+				for (i, apple) in self.apples.iter().enumerate() {
+					if lp.coords() == apple.coords() {
+						snake
+							.increment_size(self.snake_increment_size, None)
+							.unwrap();
+						delete_apples.push(i);
+					}
+				}
+			}
+		}
+
+		for index in delete_apples {
+			self.apples.swap_remove(index);
+		}
+
+		while self.apples.len() < self.apples.capacity() {
+			self.spawn_apple(self.grid.random_coords(0, None), None)?;
+		}
+
+		Ok(())
 	}
 
 	/// Return mutable reference to snake with specified name.
@@ -152,7 +189,7 @@ impl GameData {
 		let name = name.into();
 		for snake in &self.snakes {
 			if name == snake.name {
-				return Ok(&snake);
+				return Ok(snake);
 			}
 		}
 		Err(Box::new(GameError::SnakeNotFound(name)))
@@ -178,6 +215,18 @@ impl GameData {
 		false
 	}
 
+	/// Add a new apple to the game. If `color` is none, use [`Apple::COLOR`]
+	/// one.
+	pub fn spawn_apple(&mut self, coords: Coordinates, color: Option<Color>) -> Result<()> {
+		let capacity = self.apples.capacity();
+		if capacity != 0 && capacity == self.apples.len() {
+			Err(Box::new(GameError::TooMuchApples(coords)))
+		} else {
+			self.apples.push(Apple::new(coords, color));
+			Ok(())
+		}
+	}
+
 	/// Return number of snakes in the game.
 	pub fn snakes(&self) -> usize {
 		self.snakes.len()
@@ -200,11 +249,12 @@ impl GameData {
 }
 
 impl Default for GameData {
-	/// Return a new [`GameData`] with possible unlimited amount of snake or
-	/// apples in the game and grid size depending on
-	/// [DEFAULT_GRID_SIZE](Self::DEFAULT_GRID_SIZE) constant.
+	/// Return a new [`GameData`] with possible unlimited amount of snakes or
+	/// apples in the game, grid size depending on
+	/// [DEFAULT_GRID_SIZE](Self::DEFAULT_GRID_SIZE) constant and default
+	/// snake's increment size.
 	fn default() -> Self {
-		Self::new(None, None, None)
+		Self::new(None, None, None, None)
 	}
 }
 
@@ -276,7 +326,10 @@ impl Snake {
 	/// Change snake's leading part direction.
 	pub fn change_direction(&mut self, direction: Direction) -> Result<()> {
 		match self.lp_mut() {
-			Some(_) => {self.direction = direction;Ok(())},
+			Some(_) => {
+				self.direction = direction;
+				Ok(())
+			}
 			None => Err(Box::new(GameError::EmptySnake(self.name()))),
 		}
 	}
@@ -315,6 +368,51 @@ impl Snake {
 		true
 	}
 
+	/// Incement snake size on `n` parts. If `colors` is none, then use snake's
+	/// first part's color for all inserted parts, otherwise insert these parts
+	/// with colors in unwrapped `colors` vector.
+	fn increment_size(&mut self, mut n: usize, colors: Option<Vec<Color>>) -> Result<()> {
+		if n == 0 {
+			return Ok(());
+		}
+		match colors {
+			Some(colors) => {
+				for color in colors {
+					self.insert_part(Some(color))?;
+					n -= 1;
+				}
+				for _ in 0..n {
+					self.insert_part(None)?;
+				}
+			}
+			None => {
+				for _ in 0..n {
+					self.insert_part(None)?;
+				}
+			}
+		}
+		Ok(())
+	}
+
+	/// Insert part with `color` color into the start of parts vector and make
+	/// it being coordinated as a tail of the snake. If it's none, then use
+	/// snake's first part's color.
+	fn insert_part(&mut self, color: Option<Color>) -> Result<()> {
+		let tail_part = match self.parts.first() {
+			Some(part) => part.clone(),
+			None => return Err(Box::new(GameError::EmptySnake(self.name()))),
+		};
+		let color = match color {
+			Some(color) => color,
+			None => tail_part.color(),
+		};
+
+		self.parts
+			.insert(0, SnakePart::new(tail_part.coords(), color));
+
+		Ok(())
+	}
+
 	/// Return immutable reference of the snake leading part.
 	fn lp(&self) -> Option<&SnakePart> {
 		self.parts.last()
@@ -347,7 +445,7 @@ struct SnakePart {
 }
 
 impl SnakePart {
-	/// Return new part of a snake with specified coordinates, color, and direction.
+	/// Return new part of a snake with specified coordinates, color.
 	fn new(coordinates: Coordinates, color: Color) -> Self {
 		Self { coordinates, color }
 	}
@@ -389,17 +487,29 @@ impl SnakePart {
 #[serde(rename_all = "snake_case")]
 struct Apple {
 	coordinates: Coordinates,
+	color: Color,
 }
 
 impl Apple {
-	/// Return a new [`Apple`].
-	fn new(coordinates: Coordinates) -> Self {
-		Self { coordinates }
+	/// Default apple's color.
+	pub const COLOR: Color = Color::RED;
+
+	/// Return a new [`Apple`]. If `color` is none, use [`Self::COLOR`] one.
+	fn new(coordinates: Coordinates, color: Option<Color>) -> Self {
+		Self {
+			coordinates,
+			color: color.unwrap_or(Self::COLOR),
+		}
 	}
 
-	/// Return apple coordinates.
+	/// Return apple's coordinates.
 	fn coords(&self) -> Coordinates {
 		self.coordinates
+	}
+
+	/// Return apple's color.
+	fn color(&self) -> Color {
+		self.color
 	}
 }
 
@@ -685,17 +795,21 @@ pub mod grid {
 /// Error type returned by [`game`](crate::game) module functions.
 #[derive(Debug, Clone)]
 pub enum GameError {
-	/// Snake with name specified in argument not found.
+	/// Snake with name specified in variant argument not found.
 	SnakeNotFound(String),
 
 	/// Adding a snake with name specified in variant argument when maximum
 	/// amount of snakes in game is already reached.
-	TooMuchSnakes,
+	TooMuchSnakes(String),
 
-	/// Snake with name specified in argument has no parts.
+	/// Adding an apple with coordinates specified in variant argument when
+	/// maximum amount of apples in game is already reached.
+	TooMuchApples(Coordinates),
+
+	/// Snake with name specified in variant argument has no parts.
 	EmptySnake(String),
 
-	/// Snake with name specified in argument exists.
+	/// Snake with name specified in variant argument exists.
 	NonUniqueName(String),
 }
 
@@ -703,7 +817,10 @@ impl fmt::Display for GameError {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
 			Self::SnakeNotFound(name) => write!(f, "snake with {} name not found", name),
-			Self::TooMuchSnakes => write!(f, "maximum amount of snakes in the game is reached"),
+			Self::TooMuchSnakes(name) => write!(f,
+				"can't add snake with name {} because maximum amount of snakes in the game is reached", name),
+			Self::TooMuchApples(coords) => write!(f,
+				"can't add apples with {} coords because maximum amount of apples in the game is reached", coords),
 			Self::EmptySnake(name) => write!(f, "snake with {} name has no parts", name),
 			Self::NonUniqueName(name) => write!(f, "snake with {} name already exists", name),
 		}

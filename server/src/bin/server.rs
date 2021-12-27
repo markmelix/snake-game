@@ -18,11 +18,11 @@ fn main() {
 			Some(settings.grid_size),
 			Some(settings.snakes),
 			Some(settings.apples),
+			Some(settings.snake_inc_size),
 		),
 		Some(settings.game_delay),
 	) {
 		log::error!("Error while running the server: {}", e);
-		return;
 	}
 }
 
@@ -44,8 +44,8 @@ fn init_cli() -> clap::ArgMatches<'static> {
 				.value_name("SIZE")
 				.help(&format!(
 					"Specifies game grid size. Default is {}x{}",
-					GameData::DEFAULT_GRID_SIZE.0,
-					GameData::DEFAULT_GRID_SIZE.1
+					GameData::GRID_SIZE.0,
+					GameData::GRID_SIZE.1
 				)),
 		)
 		.arg(
@@ -55,7 +55,7 @@ fn init_cli() -> clap::ArgMatches<'static> {
 				.value_name("NUMBER")
 				.help(&format!(
 					"Specifies maximum amount of snakes on the server. Default is {}",
-					GameData::RECOMMENDED_SNAKES_AMOUNT
+					GameData::SNAKES_AMOUNT
 				)),
 		)
 		.arg(
@@ -65,7 +65,7 @@ fn init_cli() -> clap::ArgMatches<'static> {
 				.value_name("NUMBER")
 				.help(&format!(
 					"Specifies maximum amount of apples that can be spawned on the server. Default is {}",
-						GameData::RECOMMENDED_APPLES_AMOUNT)),
+						GameData::APPLES_AMOUNT)),
 		)
 		.arg(
 			Arg::with_name("game_delay")
@@ -77,6 +77,16 @@ fn init_cli() -> clap::ArgMatches<'static> {
 					server::GAME_DELAY
 				)),
 		)
+		.arg(
+			Arg::with_name("snake_inc_size")
+				.short("-i")
+				.long("inc-size")
+				.value_name("NUMBER")
+				.help(&format!(
+					"Specifies snake increment size when it eats an apple. Default is {:?}",
+					GameData::SNAKE_INCREMENT_SIZE
+				)),
+		)
 		.get_matches()
 }
 
@@ -86,6 +96,7 @@ struct Settings {
 	snakes: usize,
 	apples: usize,
 	game_delay: Duration,
+	snake_inc_size: usize,
 }
 
 fn init_settings(matches: clap::ArgMatches) -> Settings {
@@ -105,15 +116,15 @@ fn init_settings(matches: clap::ArgMatches) -> Settings {
 						.expect("There should be two values separated with 'x'"),
 				)
 			}
-			None => GameData::DEFAULT_GRID_SIZE,
+			None => GameData::GRID_SIZE,
 		},
 		snakes: match matches.value_of("snakes") {
 			Some(val) => val.parse::<usize>().expect("Parsing snakes argument"),
-			None => GameData::RECOMMENDED_SNAKES_AMOUNT,
+			None => GameData::SNAKES_AMOUNT,
 		},
 		apples: match matches.value_of("apples") {
 			Some(val) => val.parse::<usize>().expect("Parsing apples argument"),
-			None => GameData::RECOMMENDED_APPLES_AMOUNT,
+			None => GameData::APPLES_AMOUNT,
 		},
 		game_delay: match matches.value_of("game_delay") {
 			Some(val) => val
@@ -122,6 +133,10 @@ fn init_settings(matches: clap::ArgMatches) -> Settings {
 				.into(),
 			None => server::GAME_DELAY,
 		},
+		snake_inc_size: match matches.value_of("inc_size") {
+			Some(val) => val.parse::<usize>().expect("Parsing snake increment size argument"),
+			None => GameData::SNAKE_INCREMENT_SIZE,
+		}
 	}
 }
 

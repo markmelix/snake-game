@@ -435,6 +435,7 @@ impl Session {
 			exchange.assign_response(response);
 
 			gamedata().kill_dead_snakes();
+			gamedata().check_apples()?;
 			gamedata().update_grid()?;
 
 			if let Some(delay) = delay {
@@ -445,7 +446,7 @@ impl Session {
 				RequestKind::Connect => {
 					let buffer = serde_json::to_string(&request.client())?;
 					log::debug!("Writing name to stream: {}", buffer);
-					stream.write(&buffer.as_bytes())?;
+					stream.write(buffer.as_bytes())?;
 				}
 				RequestKind::GetGrid => {
 					let buffer = match gamedata().grid().as_bytes() {
