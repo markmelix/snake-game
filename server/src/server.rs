@@ -117,6 +117,9 @@ use std::{
 	time::Duration,
 };
 
+/// How many bytes client can read from a stream at a time.
+const READ_LIMIT: usize = 1024 * 10;
+
 /// Default delay between every server response.
 pub const GAME_DELAY: Duration = Duration::from_millis(50);
 
@@ -145,7 +148,7 @@ pub trait Client {
 	/// This function should be used to parse returned by server client's id
 	/// value after connection request.
 	fn read_client_id(&mut self) -> Result<()> {
-		let mut buffer = [0; 1024 * 10];
+		let mut buffer = [0; READ_LIMIT];
 		self.stream().unwrap().read(&mut buffer).unwrap();
 
 		let name = String::from_utf8_lossy(&buffer);
@@ -164,7 +167,7 @@ pub trait Client {
 
 		Request::new(id, RequestKind::GetGrid).write(stream)?;
 
-		let mut buffer = [0; 1024 * 10];
+		let mut buffer = [0; READ_LIMIT];
 
 		stream.read(&mut buffer)?;
 
