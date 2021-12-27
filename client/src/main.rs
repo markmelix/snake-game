@@ -12,6 +12,9 @@ use snake_game::{
 };
 use std::net::TcpStream;
 
+/// Print grid into stdout when available.
+const DEBUG_GRID: bool = false;
+
 fn main() {
 	let matches = CliApp::new("Snake Game Client by Mark")
 		.about("Allows connecting to some multiplayer server")
@@ -90,7 +93,7 @@ impl Client for GuiApp {
 impl GuiApp {
 	/// Return a new [`Client`]
 	fn new(id: Option<String>, address: Option<String>, make_connection: bool) -> Self
-where {
+	where {
 		Self {
 			initial_id: id.clone(),
 			id,
@@ -99,6 +102,19 @@ where {
 			connection_status: String::new(),
 			stream: None,
 			grid: None,
+		}
+	}
+
+	/// Connect to the server.
+	///
+	/// # Panic
+	/// Panics if `self.address` or `self.name` is none.
+	fn connect(&mut self) {
+		let address = self.address.clone().unwrap();
+		self.make_connection = false;
+		match <Self as Client>::connect(self, address) {
+			Ok(_) => self.connection_status = String::from("Success"),
+			Err(e) => self.connection_status = format!("Error: {}", e),
 		}
 	}
 
@@ -114,19 +130,6 @@ where {
 				self.stream = None;
 				self.connection_status = String::from("Disconnected")
 			},
-			Err(e) => self.connection_status = format!("Error: {}", e),
-		}
-	}
-
-	/// Connect to the server.
-	///
-	/// # Panic
-	/// Panics if `self.address` or `self.name` is none.
-	fn connect(&mut self) {
-		let address = self.address.clone().unwrap();
-		self.make_connection = false;
-		match <Self as Client>::connect(self, address) {
-			Ok(_) => self.connection_status = String::from("Success"),
 			Err(e) => self.connection_status = format!("Error: {}", e),
 		}
 	}
@@ -198,13 +201,15 @@ impl epi::App for GuiApp {
 			egui::CentralPanel::default().show(ctx, |ui| {
 				let grid = self.grid.clone().unwrap();
 
-				println!(
-					"---\nDisplaying \"{}\" server's grid with {}x{} size:\n{}---\n",
-					self.address.clone().unwrap(),
-					grid.size.0,
-					grid.size.1,
-					grid
-				);
+				if DEBUG_GRID {
+					println!(
+						"---\nDisplaying \"{}\" server's grid with {}x{} size:\n{}---\n",
+						self.address.clone().unwrap(),
+						grid.size.0,
+						grid.size.1,
+						grid
+					);
+				}
 
 				let cell = 20.0;
 				let frame = cell; // frame stroke size

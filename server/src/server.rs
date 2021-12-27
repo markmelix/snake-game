@@ -107,11 +107,11 @@ use crate::{
 	Result,
 };
 use serde::{Deserialize, Serialize};
-use std::net::{TcpListener, TcpStream, ToSocketAddrs};
 use std::{
+	net::{TcpListener, TcpStream, ToSocketAddrs},
 	error,
 	fmt::{self, Debug},
-	io::{Read, Write},
+	io::{self, Read, Write},
 	sync::{Arc, Mutex},
 	thread,
 	time::Duration,
@@ -126,6 +126,11 @@ const READ_LIMIT: usize = 1024 * 4 * CHAR;
 /// How many bytes can have client id.
 const CLIENT_ID_LIMIT: usize = 64 * CHAR;
 
+/// Timeout to be set to client's connection stream.
+///
+/// If duration is zero then this constant must be set to None.
+const CLIENT_READ_TIMEOUT: Option<Duration> = Some(Duration::from_millis(50));
+
 /// Default delay between every server response.
 pub const GAME_DELAY: Duration = Duration::from_millis(70);
 
@@ -136,6 +141,7 @@ pub trait Client {
 	fn connect<A: ToSocketAddrs + Debug>(&mut self, address: A) -> Result<()> {
 		match TcpStream::connect(&address) {
 			Ok(stream) => {
+				stream.set_read_timeout(CLIENT_READ_TIMEOUT)?;
 				self.set_stream(Some(stream));
 				Request::new(self.id().unwrap(), RequestKind::Connect)
 					.write(self.stream().unwrap())
@@ -171,11 +177,24 @@ pub trait Client {
 		let id = self.id().unwrap();
 		let stream = self.stream().unwrap();
 
-		Request::new(id, RequestKind::GetGrid).write(stream)?;
+		Request::new(id.clone(), RequestKind::GetGrid).write(stream)?;
 
 		let mut buffer = [0; READ_LIMIT];
 
-		stream.read(&mut buffer)?;
+		while let Err(e) = stream.read(&mut buffer) {
+			// WouldBlock error returned if there's read timeout. There may be
+			// read timeout if both server and client are reading, so we must
+			// force someone (in our case, client) break infinitive waiting.
+			// Thus, we handle this timeout error to handle this waiting and
+			// repeat requesting, otherwise we return error not related to
+			// reading timeout.
+			if let io::ErrorKind::WouldBlock = e.kind() {
+				buffer = [0; READ_LIMIT];
+				Request::new(id.clone(), RequestKind::GetGrid).write(stream)?;
+			} else {
+				return Err(Box::new(e));
+			}
+		}
 
 		let string = String::from_utf8_lossy(&buffer);
 
@@ -229,6 +248,7 @@ pub fn run<A: ToSocketAddrs>(
 	let gamedata = Arc::new(Mutex::new(gamedata));
 	let game_delay = game_delay.map_or(GAME_DELAY, |d| d);
 
+	// Update GameData in thread separate thread
 	let gamedata_clone = gamedata.clone();
 	thread::Builder::new().name("GameData handler".into()).spawn(move || {
 		let gamedata = || gamedata_clone.lock().expect("acquiring mutex lock");
@@ -240,6 +260,7 @@ pub fn run<A: ToSocketAddrs>(
 		}
 	})?;
 
+	// Start handling connections
 	loop {
 		let (socket, address) = match listener.accept() {
 			Ok(val) => val,
@@ -248,6 +269,7 @@ pub fn run<A: ToSocketAddrs>(
 				continue;
 			}
 		};
+		// Handle client in a separate thread
 		let gamedata = gamedata.clone();
 		thread::Builder::new().name(format!("{}'s handler", address)).spawn(
 			move || match handle_client(socket, gamedata) {
@@ -508,10 +530,13 @@ impl Session {
 
 	/// Remove uncompleted exchanges from stack.
 	pub fn discard_exchanges(&mut self) {
-		for i in 0..self.exchanges().len() {
+		let mut i = 0;
+		while i < self.exchanges().len() {
 			if !self.exchanges_mut()[i].completed() {
 				self.exchanges_mut().remove(i);
+				i -= 1;
 			}
+			i += 1;
 		}
 	}
 }
