@@ -121,7 +121,7 @@ use std::{
 const READ_LIMIT: usize = 1024 * 10;
 
 /// Default delay between every server response.
-pub const GAME_DELAY: Duration = Duration::from_millis(50);
+pub const GAME_DELAY: Duration = Duration::from_millis(70);
 
 /// Trait which should be implemented for client abstractions.
 pub trait Client {
