@@ -1,5 +1,7 @@
 [workspace]
 members = [
+	"game",
+	"logger",
 	"server",
 	"client"
 ]

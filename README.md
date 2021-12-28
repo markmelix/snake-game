@@ -13,7 +13,7 @@ major updates is being changed in the future. Now project is very messy and it
 should be refactored and updated a lot.
 
 ## TODO list
-### Server todos
+### Server backlog
 - [x] Generate random coordinates of a new snake depending on all parts
 - [x] Fix snake change direction algorithm
 - [x] Document specifications for clients
@@ -21,17 +21,18 @@ should be refactored and updated a lot.
 - [x] Implement apples
 - [x] Add more abilities to setup server. For instance, add ability to control
 	  what color and length will snakes have after being spawned
+- [ ] Implement system to protect snake from death when it's going to move into
+      a separate direction relative to its leading part
 - [ ] Implement server console with admin features
 - [ ] Create library bindings for Python
 - [ ] Optimize algorithms and make server more fast
 - [ ] Get rid of most `unwrap`s and replace them with error handling
 
-### Logger todos
-- [ ] Implement logger library which will contain everything other libraries in
-	  this project may need for logging. Now logging are implemented
-	  by server itself using `log` and `env_logger` crates
+### Logger backlog
+- [x] Implement logger library which will contain everything other crates in
+	  this project may need for logging.
 
-### Official client todos
+### Official client backlog
 - [ ] Get rid of most `unwrap`s and replace them with the error handling
 - [ ] Make GUI more beautiful
 - [ ] Add some information into GUI to make client more informative

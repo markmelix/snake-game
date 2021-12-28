@@ -2,10 +2,8 @@ const DEFAULT_PORT: &str = "8787";
 
 use std::time::Duration;
 
-use snake_game::{
-    game::{Direction, GameData, Settings, SnakeLength},
-    server,
-};
+use game::prelude::*;
+use logger::*;
 
 fn main() {
     init_logger();
@@ -13,14 +11,14 @@ fn main() {
 
     let address = format!("0.0.0.0:{}", port);
 
-    log::info!("Running server on {} address", address);
+    info!("Running server on {} address", address);
 
     if let Err(e) = server::run(
         address,
         GameData::new(Some(grid_size), settings),
         Some(game_delay),
     ) {
-        log::error!("Error while running the server: {}", e);
+        error!("Error while running the server: {}", e);
     }
 }
 
@@ -193,50 +191,4 @@ fn init_settings(matches: clap::ArgMatches) -> (String, (usize, usize), Duration
             },
         },
     )
-}
-
-fn init_logger() {
-    let log_level = match cfg!(debug_assertions) {
-        true => "trace",
-        false => "info",
-    };
-
-    env_logger::Builder::from_env(
-        env_logger::Env::default()
-            .filter_or("LOG_LEVEL", log_level)
-            .write_style_or("LOG_STYLE", "auto"),
-    )
-    .format(|buf, record| {
-        use env_logger::fmt::Color;
-        use log::Level;
-        use std::io::Write;
-
-        let mut error = buf.style();
-        let mut warn = buf.style();
-        let mut info = buf.style();
-        let mut debug = buf.style();
-        let mut trace = buf.style();
-
-        error.set_color(Color::Red).set_bold(true);
-        warn.set_color(Color::Yellow);
-        info.set_color(Color::Cyan);
-        debug.set_color(Color::Magenta);
-        trace.set_color(Color::Blue);
-
-        let level_style = match record.level() {
-            Level::Error => error,
-            Level::Warn => warn,
-            Level::Info => info,
-            Level::Debug => debug,
-            Level::Trace => trace,
-        };
-
-        writeln!(
-            buf,
-            "{}\t{}",
-            level_style.value(record.level()),
-            record.args()
-        )
-    })
-    .init();
 }
