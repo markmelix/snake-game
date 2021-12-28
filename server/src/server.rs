@@ -248,7 +248,7 @@ pub fn run<A: ToSocketAddrs>(
 	let gamedata = Arc::new(Mutex::new(gamedata));
 	let game_delay = game_delay.map_or(GAME_DELAY, |d| d);
 
-	// Update GameData in thread separate thread
+	// Update GameData in a separate thread
 	let gamedata_clone = gamedata.clone();
 	thread::Builder::new().name("GameData handler".into()).spawn(move || {
 		let gamedata = || gamedata_clone.lock().expect("acquiring mutex lock");
@@ -411,9 +411,7 @@ impl Session {
 
 			let response = match request.kind {
 				RequestKind::Connect => {
-					let rng = rand::thread_rng();
-					let snake_length = 1; //rng.gen_range(5..=10);
-					let snake_coords = gamedata().grid().random_coords(snake_length, Some(rng));
+					is_connection_request = true;
 					let mut name = request.client;
 
 					// Check whether there is already a snake with such name and
@@ -422,17 +420,11 @@ impl Session {
 						name.push_str(&format!(" ({})", gamedata().snakes()));
 					}
 
-					is_connection_request = true;
 					request.client = name.clone();
 
 					Response::new(
 						request.clone(),
-						gamedata().spawn_snake(
-							name,
-							snake_coords,
-							Direction::Right,
-							snake_length as u32,
-						),
+						gamedata().spawn_snake(name, None, None, None),
 					)
 				}
 				RequestKind::ChangeDirection(direction) => {
