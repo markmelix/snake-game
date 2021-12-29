@@ -5,12 +5,12 @@ use rand_derive2::RandGen;
 use serde::{Deserialize, Serialize};
 use std::{fmt, ops, str::FromStr};
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
 /// Coordinates abstraction.
 ///
 /// Note that this coordinates system is same as in math, so (0, 0) point is the
 /// bottom left corner of the screen.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub struct Coordinates {
     /// Coordinate relative to the abscissa axis.
     pub x: i32,
@@ -34,6 +34,12 @@ impl Coordinates {
     pub fn to_f32(self) -> [f32; 2] {
         [self.x as f32, self.y as f32]
     }
+}
+
+impl From<Coordinates> for (i32, i32) {
+	fn from(c: Coordinates) -> Self {
+		(c.x, c.y)
+	}
 }
 
 impl From<(i32, i32)> for Coordinates {

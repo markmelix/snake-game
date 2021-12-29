@@ -187,15 +187,11 @@ impl epi::App for GuiApp {
                 ui.label(self.connection_status.clone());
             });
         } else {
-            self.grid = match self.request_grid() {
-                Ok(grid) => Some(grid),
-                Err(e) => {
-                    self.connection_status = format!("Error while requesting a grid: {}", e);
-                    self.make_connection = false;
-                    self.stream = None;
-                    return;
-                }
-            };
+			let mut grid = self.request_grid();
+			while grid.is_err() {
+				grid = self.request_grid();
+			}
+			self.grid = Some(grid.unwrap());
 
             egui::CentralPanel::default().show(ctx, |ui| {
                 let grid = self.grid.clone().unwrap();

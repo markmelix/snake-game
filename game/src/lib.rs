@@ -47,29 +47,29 @@ impl GameData {
 
     /// Kill over-bounded or bumped snakes.
     pub fn kill_dead_snakes(&mut self) {
-        let snakes = self.snakes.clone();
-        for mut i in 0..snakes.len() {
-            if !&snakes[i].alive() {
-                self.snakes.remove(i);
-                continue;
-            }
-            for snake in &snakes {
-                for part in &snake.pwl() {
-                    if self.snakes[i].lp().unwrap().coords() == part.coords() {
-                        self.snakes.remove(i);
-                        i -= 1;
-                    }
-                }
-            }
-        }
+		self.snakes.retain(|snake| {
+			let kill = {
+				let parts_bumped = snake.parts_bumped();
+				if parts_bumped.is_err() || parts_bumped.unwrap() { return true; }
+				
+				let size = (self.grid.size.0 as i32, self.grid.size.1 as i32);
+				let (x, y): (i32, i32) = snake.lp().unwrap().coords().into();
+
+				x < 1 || x > size.0 as i32 || y < 1 || y > size.1 as i32
+			};
+			!kill
+		});
     }
 
     /// Refill [`game grid`](Grid) with a new data and move all snakes.
     pub fn update_grid(&mut self) -> Result<()> {
         let mut grid = Grid::new(self.grid.size);
         for apple in &self.apples {
-            grid.data
-                .push(GridPoint::new(GameObject::Apple, apple.coords(), Color::RED))
+            grid.data.push(GridPoint::new(
+                GameObject::Apple,
+                apple.coords(),
+                Color::RED,
+            ))
         }
         for snake in &mut self.snakes {
             snake.move_parts(self.settings.snake_step)?;

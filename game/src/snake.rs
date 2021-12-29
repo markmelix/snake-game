@@ -103,20 +103,19 @@ impl Snake {
         Ok(())
     }
 
-    /// Check if snake is alive.
+    /// Check does some snake parts bumped the leading one or not.
     ///
-    /// Return `true`, if it is, or `false`, if it's not.
-    pub(crate) fn alive(&self) -> bool {
-        let lp = match self.lp() {
-            Some(val) => val,
-            None => return false,
-        };
+    /// Return `true`, if they does, or `false`, if doesn't.
+    pub(crate) fn parts_bumped(&self) -> Result<bool> {
+		let lp = self.lp();
+		if lp.is_none() { return Err(Box::new(GameError::EmptySnake(self.name()))); }
+		let lp = lp.unwrap();
         for part in self.pwl() {
             if part.coords() == lp.coords() {
-                return false;
+                return Ok(true);
             }
         }
-        true
+        Ok(false)
     }
 
     /// Incement snake size on `n` parts. If `colors` is none, then use snake's
