@@ -68,8 +68,8 @@ bindings.
 If you don't want to wait or you don't write on Python, than you should
 implement everything on your own.
 
-For detailed instructions on how to implement your own client, see game
-library documentation.
+For detailed instructions on how to implement your own client, see server
+crate documentation.
 
 ## FAQ
 ### Where is game library documentation?
