@@ -21,8 +21,8 @@ should be refactored and updated a lot.
 - [x] Implement apples
 - [x] Add more abilities to setup server. For instance, add ability to control
 	  what color and length will snakes have after being spawned
-- [ ] Implement system to protect snake from death when it's going to move into
-      a separate direction relative to its leading part
+- [x] Implement system to protect snake from death when it's going to turn 180
+      degrees
 - [ ] Implement server console with admin features
 - [ ] Create library bindings for Python
 - [ ] Optimize algorithms and make server more fast
@@ -73,10 +73,14 @@ library documentation.
 
 ## FAQ
 ### Where is game library documentation?
-Run this command in the project root to open generated documentation in your
-default browser:
+Run one of these commands in the project root to open generated documentation in
+your default browser (--no-deps flag forces generator not to build dependencies
+docs):
 ```bash
-cargo doc --open
+cargo doc --package server --no-deps --open # open server docs
+cargo doc --package game --no-deps --open # open game abstractions docs
+cargo doc --package client --no-deps --open # open official client docs
+cargo doc --package logger --no-deps --open # open logger docs
 ```
 
 ### How do I get my public ip?
