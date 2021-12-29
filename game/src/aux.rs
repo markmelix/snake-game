@@ -73,6 +73,18 @@ pub enum Direction {
     Right,
 }
 
+impl Direction {
+    /// Return opposite direction.
+    pub fn opposite(self) -> Self {
+        match self {
+            Self::Up => Self::Down,
+            Self::Down => Self::Up,
+            Self::Left => Self::Right,
+            Self::Right => Self::Left,
+        }
+    }
+}
+
 impl Default for Direction {
     fn default() -> Self {
         Self::Right
@@ -97,6 +109,14 @@ impl FromStr for Direction {
             "left" => Ok(Self::Left),
             _ => Err(ParseDirectionError),
         }
+    }
+}
+
+impl ops::Neg for Direction {
+    type Output = Self;
+
+    fn neg(self) -> Self::Output {
+        self.opposite()
     }
 }
 

@@ -72,12 +72,16 @@ impl Snake {
 
     /// Change snake's leading part direction.
     pub fn change_direction(&mut self, direction: Direction) -> Result<()> {
-        match self.lp_mut() {
-            Some(_) => {
-                self.direction = direction;
-                Ok(())
+        match self.is_empty() {
+            false => {
+				if self.len() > 1 && self.direction == -direction {
+					Err(Box::new(GameError::ChangeDirectionToOpposite(self.name())))
+				} else {
+					self.direction = direction;
+					Ok(())
+				}
             }
-            None => Err(Box::new(GameError::EmptySnake(self.name()))),
+            true => Err(Box::new(GameError::EmptySnake(self.name()))),
         }
     }
 
@@ -163,6 +167,16 @@ impl Snake {
 
         Ok(())
     }
+
+	/// Return snake's length (amount of parts).
+	pub fn len(&self) -> usize {
+		self.parts.len()
+	}
+
+	/// Return true if snake has zero length, false otherwise.
+	pub fn is_empty(&self) -> bool {
+		self.len() == 0
+	}
 
     /// Return immutable reference of the snake leading part.
     pub(crate) fn lp(&self) -> Option<&SnakePart> {

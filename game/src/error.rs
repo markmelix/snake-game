@@ -6,22 +6,26 @@ use std::{error, fmt};
 /// Error type returned by crate's functions.
 #[derive(Debug, Clone)]
 pub enum GameError {
-    /// Snake with name specified in variant argument not found.
+    /// Snake with name specified in variant's argument not found.
     SnakeNotFound(String),
 
-    /// Adding a snake with name specified in variant argument when maximum
+    /// Adding a snake with name specified in variant's argument when maximum
     /// amount of snakes in game is already reached.
     TooMuchSnakes(String),
 
-    /// Adding an apple with coordinates specified in variant argument when
+    /// Adding an apple with coordinates specified in variant's argument when
     /// maximum amount of apples in game is already reached.
     TooMuchApples(Coordinates),
 
-    /// Snake with name specified in variant argument has no parts.
+    /// Snake with name specified in variant's argument has no parts.
     EmptySnake(String),
 
-    /// Snake with name specified in variant argument exists.
+    /// Snake with name specified in variant's argument exists.
     NonUniqueName(String),
+
+	/// Snake with name specified in variant's argument and length greater than
+	/// one tries to turn 180 degrees.
+	ChangeDirectionToOpposite(String),
 }
 
 impl fmt::Display for GameError {
@@ -34,6 +38,7 @@ impl fmt::Display for GameError {
 				"can't add apples with {} coords because maximum amount of apples in the game is reached", coords),
             Self::EmptySnake(name) => write!(f, "snake with {} name has no parts", name),
             Self::NonUniqueName(name) => write!(f, "snake with {} name already exists", name),
+			Self::ChangeDirectionToOpposite(name) => write!(f, "snake with {} name tries to turn 180 degrees", name),
         }
     }
 }
