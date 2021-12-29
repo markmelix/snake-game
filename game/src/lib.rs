@@ -55,7 +55,7 @@ impl GameData {
 				let size = (self.grid.size.0 as i32, self.grid.size.1 as i32);
 				let (x, y): (i32, i32) = snake.lp().unwrap().coords().into();
 
-				x < 1 || x > size.0 as i32 || y < 1 || y > size.1 as i32
+				x < 0 || x > size.0 as i32 || y < 1 || y > size.1 as i32
 			};
 			!kill
 		});
