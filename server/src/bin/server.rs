@@ -29,6 +29,7 @@ fn init_cli() -> clap::ArgMatches<'static> {
         .about("Allows running own multiplayer server")
         .arg(
             Arg::with_name("port")
+                .value_name("NUMBER")
                 .short("p")
                 .long("port")
                 .help(&format!("Server port. Default is {}", DEFAULT_PORT)),
