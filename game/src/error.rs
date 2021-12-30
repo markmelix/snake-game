@@ -57,3 +57,16 @@ impl fmt::Display for ParseDirectionError {
 }
 
 impl error::Error for ParseDirectionError {}
+
+/// Error returned if can't parse [`SnakeLength`](crate::snake::SnakeLength) from a string.
+#[derive(Debug, Clone)]
+pub struct ParseSnakeLengthError;
+
+impl fmt::Display for ParseSnakeLengthError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f,
+"can't parse SnakeLength because parsed string is not a valid range or number")
+    }
+}
+
+impl error::Error for ParseSnakeLengthError {}

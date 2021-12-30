@@ -30,7 +30,7 @@ impl Snake {
             parts: {
                 let mut v = vec![];
                 for i in 0..length {
-                    let offset = length as i32 + i as i32;
+                    let offset = i as i32;
                     let part_coords = match direction {
                         Direction::Right => (coordinates.x + offset, coordinates.y),
                         Direction::Left => (coordinates.x - offset, coordinates.y),
@@ -55,7 +55,7 @@ impl Snake {
 
     /// Move snake's leading part relatively to current direction on `step`
     /// points.
-    pub(crate) fn step_move(&mut self, step: i32) -> Result<()> {
+    fn lp_move(&mut self, step: i32) -> Result<()> {
         let direction = self.direction;
         let lp = match self.lp_mut() {
             Some(lp) => lp,
@@ -74,12 +74,12 @@ impl Snake {
     pub fn change_direction(&mut self, direction: Direction) -> Result<()> {
         match self.is_empty() {
             false => {
-				if self.len() > 1 && self.direction == -direction {
-					Err(Box::new(GameError::ChangeDirectionToOpposite(self.name())))
-				} else {
-					self.direction = direction;
-					Ok(())
-				}
+                if self.len() > 1 && self.direction == -direction {
+                    Err(Box::new(GameError::ChangeDirectionToOpposite(self.name())))
+                } else {
+                    self.direction = direction;
+                    Ok(())
+                }
             }
             true => Err(Box::new(GameError::EmptySnake(self.name()))),
         }
@@ -98,7 +98,7 @@ impl Snake {
             };
             parts[i].set_coords(coords.unwrap());
         }
-        self.step_move(step)?;
+        self.lp_move(step)?;
 
         Ok(())
     }
@@ -107,9 +107,11 @@ impl Snake {
     ///
     /// Return `true`, if they does, or `false`, if doesn't.
     pub(crate) fn parts_bumped(&self) -> Result<bool> {
-		let lp = self.lp();
-		if lp.is_none() { return Err(Box::new(GameError::EmptySnake(self.name()))); }
-		let lp = lp.unwrap();
+        let lp = self.lp();
+        if lp.is_none() {
+            return Err(Box::new(GameError::EmptySnake(self.name())));
+        }
+        let lp = lp.unwrap();
         for part in self.pwl() {
             if part.coords() == lp.coords() {
                 return Ok(true);
@@ -120,7 +122,7 @@ impl Snake {
 
     /// Incement snake size on `n` parts. If `colors` is none, then use snake's
     /// first part's color for all inserted parts, otherwise insert these parts
-    /// with colors in unwrapped `colors` vector.
+    /// reversed with colors in unwrapped `colors` vector.
     pub(crate) fn increment_size(
         &mut self,
         mut n: usize,
@@ -149,8 +151,10 @@ impl Snake {
     }
 
     /// Insert part with `color` color into the start of parts vector and make
-    /// it being coordinated as a tail of the snake. If it's none, then use
-    /// snake's first part's color.
+    /// it being coordinated as a first snake's part. If it's none, then use
+    /// snake's first part's color. To make this part coordinated as a tail of
+    /// the snake you should run `self.move_parts` twice after running this
+    /// method.
     pub(crate) fn insert_part(&mut self, color: Option<Color>) -> Result<()> {
         let tail_part = match self.parts.first() {
             Some(part) => part.clone(),
@@ -167,15 +171,15 @@ impl Snake {
         Ok(())
     }
 
-	/// Return snake's length (amount of parts).
-	pub fn len(&self) -> usize {
-		self.parts.len()
-	}
+    /// Return snake's length (amount of parts).
+    pub fn len(&self) -> usize {
+        self.parts.len()
+    }
 
-	/// Return true if snake has zero length, false otherwise.
-	pub fn is_empty(&self) -> bool {
-		self.len() == 0
-	}
+    /// Return true if snake has zero length, false otherwise.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 
     /// Return immutable reference of the snake leading part.
     pub(crate) fn lp(&self) -> Option<&SnakePart> {
@@ -188,13 +192,13 @@ impl Snake {
     }
 
     /// Return snake parts without the leading one.
-    pub(crate) fn pwl(&self) -> Vec<SnakePart> {
+    fn pwl(&self) -> Vec<SnakePart> {
         let mut parts = self.parts.clone();
         parts.pop();
         parts
     }
 
-    /// Return snake name.
+    /// Return cloned snake name.
     pub(crate) fn name(&self) -> String {
         self.name.clone()
     }
@@ -264,6 +268,10 @@ impl FromStr for SnakeLength {
                 }
             }
 
+            if end == 0 || end < start {
+                return Err(Box::new(ParseSnakeLengthError));
+            }
+
             match inclusive {
                 true => Ok(Self::Random(start..end + 1)),
                 false => Ok(Self::Random(start..end)),
@@ -273,7 +281,7 @@ impl FromStr for SnakeLength {
 }
 
 /// Snake part abstraction.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) struct SnakePart {
     coordinates: Coordinates,
@@ -281,7 +289,7 @@ pub(crate) struct SnakePart {
 }
 
 impl SnakePart {
-    /// Return new part of a snake with specified coordinates, color.
+    /// Return new part of a snake with specified coordinates and color.
     pub(crate) fn new(coordinates: Coordinates, color: Color) -> Self {
         Self { coordinates, color }
     }
@@ -291,24 +299,24 @@ impl SnakePart {
     /// # Example
     /// ```ignore
     /// use game::{snake::SnakePart, aux::*};
-    /// 
+    ///
     /// // Create new part with (3, 4) coordinates.
-    /// let mut part = SnakePart::new(Coordinates::new(3, 4), Color::BLACK, Direction::Right);
+    /// let mut part = SnakePart::new(Coordinates::new(3, 4), Color::BLACK);
     ///
     /// // Move part to (-5, 10) relative to its current coordinates.
     /// part.mv((-5, 10));
     ///
-    /// assert_eq!((-2, 14).into(), part.coords());
+    /// assert_eq!((-2, 14), part.coords().into());
     /// ```
-    pub(crate) fn mv(&mut self, coordinates: impl Into<Coordinates>) {
+    fn mv(&mut self, coordinates: impl Into<Coordinates>) {
         self.coordinates = self.coordinates + coordinates.into();
     }
 
     /// Set part coordinates.
-    pub(crate) fn set_coords(&mut self, coordinates: Coordinates) {
+    fn set_coords(&mut self, coordinates: Coordinates) {
         self.coordinates = coordinates;
     }
-	
+
     /// Return part coordinates.
     pub(crate) fn coords(&self) -> Coordinates {
         self.coordinates
@@ -317,5 +325,263 @@ impl SnakePart {
     /// Return part color.
     pub(crate) fn color(&self) -> Color {
         self.color
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    mod snake {
+		use super::*;
+		
+        #[test]
+        fn new() {
+            let snake = Snake::new("snake", (0, 0).into(), Direction::Right, 5);
+
+            assert_eq!(snake.name(), "snake".to_string());
+            assert_eq!(snake.direction, Direction::Right);
+
+            let part_coords = parts_into_tuple_coords(&snake.parts);
+
+            assert_eq!(part_coords, [(0, 0), (1, 0), (2, 0), (3, 0), (4, 0)]);
+
+            let snake = Snake::new("snake", (0, 0).into(), Direction::Left, 5);
+            let part_coords = parts_into_tuple_coords(&snake.parts);
+
+            assert_eq!(part_coords, [(0, 0), (-1, 0), (-2, 0), (-3, 0), (-4, 0)]);
+
+            let snake = Snake::new("snake", (0, 0).into(), Direction::Up, 5);
+            let part_coords = parts_into_tuple_coords(&snake.parts);
+
+            assert_eq!(part_coords, [(0, 0), (0, 1), (0, 2), (0, 3), (0, 4)]);
+
+            let snake = Snake::new("snake", (0, 0).into(), Direction::Down, 5);
+            let part_coords = parts_into_tuple_coords(&snake.parts);
+
+            assert_eq!(part_coords, [(0, 0), (0, -1), (0, -2), (0, -3), (0, -4)]);
+        }
+
+        #[test]
+        fn lp_move_expect_zero_length_error() {
+            let mut snake = Snake::new("snake", (0, 0).into(), Direction::default(), 0);
+            snake
+                .lp_move(1)
+                .expect_err("snake zero length error expected");
+        }
+
+        #[test]
+        fn lp_move() -> Result<()> {
+            let mut snake = Snake::new("snake", (0, 0).into(), Direction::Right, 5);
+            snake.lp_move(1)?;
+            let part_coords = parts_into_tuple_coords(&snake.parts);
+            assert_eq!(part_coords, [(0, 0), (1, 0), (2, 0), (3, 0), (5, 0)]);
+
+            let mut snake = Snake::new("snake", (0, 0).into(), Direction::Left, 5);
+            snake.lp_move(-5)?;
+            let part_coords = parts_into_tuple_coords(&snake.parts);
+            assert_eq!(part_coords, [(0, 0), (-1, 0), (-2, 0), (-3, 0), (1, 0)]);
+
+            let mut snake = Snake::new("snake", (0, 0).into(), Direction::Up, 5);
+            snake.lp_move(5)?;
+            let part_coords = parts_into_tuple_coords(&snake.parts);
+            assert_eq!(part_coords, [(0, 0), (0, 1), (0, 2), (0, 3), (0, 9)]);
+
+            Ok(())
+        }
+
+        #[test]
+        fn change_dir() -> Result<()> {
+            let mut snake = new_snake(Direction::Right, 1);
+            snake.change_direction(Direction::Left)?;
+
+            assert_eq!(snake.direction, Direction::Left);
+
+            let mut snake = new_snake(Direction::Up, 5);
+            snake
+                .change_direction(Direction::Down)
+                .expect_err("snake must have wanted to turn 180 degrees");
+
+            Ok(())
+        }
+
+        #[test]
+        fn move_parts() -> Result<()> {
+            let mut snake = new_snake(Direction::Right, 5);
+            snake.move_parts(1)?;
+            let parts = parts_into_tuple_coords(&snake.parts);
+
+            assert_eq!(parts, [(1, 0), (2, 0), (3, 0), (4, 0), (5, 0)]);
+
+            snake.change_direction(Direction::Up)?;
+            snake.move_parts(1)?;
+            let parts = parts_into_tuple_coords(&snake.parts);
+            assert_eq!(parts, [(2, 0), (3, 0), (4, 0), (5, 0), (5, 1)]);
+
+            snake.change_direction(Direction::Left)?;
+            snake.move_parts(1)?;
+            let parts = parts_into_tuple_coords(&snake.parts);
+            assert_eq!(parts, [(3, 0), (4, 0), (5, 0), (5, 1), (4, 1)]);
+
+            Ok(())
+        }
+
+        #[test]
+        fn parts_bumped() -> Result<()> {
+            let mut snake = new_snake(Direction::Right, 5);
+
+            assert!(!snake.parts_bumped().unwrap());
+
+            snake.change_direction(Direction::Up)?;
+            snake.move_parts(1)?;
+            snake.change_direction(Direction::Left)?;
+            snake.move_parts(1)?;
+            snake.change_direction(Direction::Down)?;
+            snake.move_parts(1)?;
+
+            assert!(snake.parts_bumped()?);
+
+            Ok(())
+        }
+
+        #[test]
+        fn insert_part() -> Result<()> {
+            let mut snake = new_snake(Direction::Right, 5);
+            snake.insert_part(Some(Color::WHITE))?;
+
+            assert_eq!(SnakePart::new((0, 0).into(), Color::WHITE), snake.parts[0]);
+
+            snake.move_parts(1)?;
+            snake.move_parts(1)?;
+
+            assert_eq!(SnakePart::new((1, 0).into(), Color::WHITE), snake.parts[0]);
+
+            snake.insert_part(None)?;
+
+            assert_eq!(snake.parts[0].color, Color::WHITE);
+
+            Ok(())
+        }
+
+        #[test]
+        fn inc_size() -> Result<()> {
+            let mut snake = new_snake(Direction::Right, 5);
+            let first_part_color = snake.parts[0].color; // save color of snake's first part
+
+            assert_eq!(snake.len(), 5);
+
+            snake.increment_size(5, None)?;
+
+            assert_eq!(snake.len(), 10);
+
+            // check that first five snake parts have same color as snake's old
+            // first part
+            assert_eq!(collect_colors(&snake.parts), [first_part_color; 5]);
+
+            let mut check_colors = vec![Color::RED, Color::BLUE, Color::YELLOW];
+
+            snake.increment_size(check_colors.len(), Some(check_colors.clone()))?;
+
+            check_colors.reverse();
+
+            assert_eq!(
+                collect_colors(&snake.parts)[0..check_colors.len()],
+                check_colors
+            );
+
+            let mut check_colors = vec![Color::WHITE, Color::BLACK];
+
+            snake.increment_size(3, Some(check_colors.clone()))?;
+
+            check_colors.push(Color::BLACK);
+            check_colors.reverse();
+
+            assert_eq!(collect_colors(&snake.parts)[0..3], check_colors);
+
+            Ok(())
+        }
+
+        #[test]
+        fn len() {
+            assert_eq!(new_snake(Default::default(), 18).len(), 18);
+        }
+
+        #[test]
+        fn is_empty() {
+            let snake = new_snake(Default::default(), 0);
+
+            assert!(snake.is_empty());
+
+            let snake = new_snake(Default::default(), 1);
+
+            assert!(!snake.is_empty());
+        }
+
+        #[test]
+        fn pwl() {
+            let snake = new_snake(Default::default(), 5);
+            assert_eq!(snake.pwl().last().unwrap().coords(), (3, 0).into());
+        }
+
+        /// Return a snake with (0, 0) leading part coordinates, `direction` and
+        /// `n` parts.
+        fn new_snake(direction: Direction, n: usize) -> Snake {
+            Snake::new("snake", (0, 0).into(), direction, n)
+        }
+
+        /// Convert all SnakePart's vector into tuple's vector.
+        fn parts_into_tuple_coords(parts: &[SnakePart]) -> Vec<(i32, i32)> {
+            parts
+                .iter()
+                .map(|p| p.coords().into())
+                .collect::<Vec<(i32, i32)>>()
+        }
+
+        fn collect_colors(parts: &[SnakePart]) -> Vec<Color> {
+            parts[0..5].iter().map(|p| p.color).collect::<Vec<Color>>()
+        }
+    }
+
+    mod snake_length {
+		use super::*;
+		
+        #[test]
+        fn snake_length() {
+            assert_eq!(SnakeLength::Fixed(10).get(), 10);
+            assert_eq!(<usize>::from(SnakeLength::Fixed(10)), 10);
+            assert!(SnakeLength::Random(5..10).get() > 4);
+            assert!(<SnakeLength>::from(5..10).get() > 4);
+        }
+
+        #[test]
+        fn fromstr() -> Result<()> {
+            assert_eq!(
+                SnakeLength::Fixed(10).get(),
+                "10".parse::<SnakeLength>()?.get()
+            );
+            assert!("5..10".parse::<SnakeLength>()?.get() < 10);
+            assert!("5..10".parse::<SnakeLength>()?.get() > 4);
+            assert!("5..=10".parse::<SnakeLength>()?.get() < 11);
+            assert!("5..=10".parse::<SnakeLength>()?.get() > 4);
+
+            assert!("asd".parse::<SnakeLength>().is_err());
+            assert!("5.10".parse::<SnakeLength>().is_err());
+            assert!("5=10".parse::<SnakeLength>().is_err());
+
+            Ok(())
+        }
+    }
+
+    mod snake_part {
+		use super::*;
+		
+        #[test]
+        fn mv() {
+            let mut part = SnakePart::new(Coordinates::new(3, 4), Color::BLACK);
+
+            part.mv((-5, 10));
+
+            assert_eq!((-2, 14), part.coords().into());
+        }
     }
 }
