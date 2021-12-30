@@ -24,16 +24,6 @@ impl Coordinates {
     pub fn new(x: i32, y: i32) -> Self {
         Self { x, y }
     }
-
-    /// Convert [`Coordinates`] to array with two u32 elements.
-    pub fn to_u32(self) -> [i32; 2] {
-        [self.x, self.y]
-    }
-
-    /// Convert [`Coordinates`] to array with two f32 elements.
-    pub fn to_f32(self) -> [f32; 2] {
-        [self.x as f32, self.y as f32]
-    }
 }
 
 impl From<Coordinates> for (i32, i32) {
@@ -53,6 +43,14 @@ impl ops::Add for Coordinates {
 
     fn add(self, other: Self) -> Self::Output {
         Self::new(self.x + other.x, self.y + other.y)
+    }
+}
+
+impl ops::Sub for Coordinates {
+    type Output = Self;
+
+    fn sub(self, other: Self) -> Self::Output {
+        Self::new(self.x - other.x, self.y - other.y)
     }
 }
 
@@ -168,7 +166,7 @@ impl Color {
         a: 255,
     };
 
-    /// The green color.
+    /// The red color.
     pub const RED: Color = Color {
         r: 255,
         g: 0,
@@ -176,6 +174,38 @@ impl Color {
         a: 255,
     };
 
+    /// The yellow color.
+    pub const YELLOW: Color = Color {
+        r: 255,
+        g: 255,
+        b: 0,
+        a: 255,
+    };
+
+	/// The magenta color.
+    pub const MAGENTA: Color = Color {
+        r: 255,
+        g: 0,
+        b: 255,
+        a: 255,
+    };
+
+	/// The blue color.
+    pub const BLUE: Color = Color {
+        r: 0,
+        g: 0,
+        b: 255,
+        a: 255,
+    };
+
+	/// The cyan color.
+    pub const CYAN: Color = Color {
+        r: 0,
+        g: 255,
+        b: 255,
+        a: 255,
+    };
+	
     /// A color with no opacity.
     pub const TRANSPARENT: Color = Color {
         r: 0,
@@ -196,6 +226,7 @@ impl fmt::Display for Color {
     }
 }
 
+/// Like [`Vec::retain`], but retain between two values.
 pub(crate) fn product_retain<T, F>(v: &mut Vec<T>, mut pred: F)
     where F: FnMut(&T, &T) -> bool
 {
@@ -210,4 +241,54 @@ pub(crate) fn product_retain<T, F>(v: &mut Vec<T>, mut pred: F)
         }
     }
     v.truncate(j);
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn coords_sum() {
+		let coords1 = Coordinates::new(10, 15);
+		let coords2 = Coordinates::new(-5, 3);
+		let coords3 = Coordinates::new(5, 18);
+
+		assert_eq!(coords1 + coords2, coords3);
+	}
+
+	#[test]
+	fn coords_sub() {
+		let coords1 = Coordinates::new(10, 15);
+		let coords2 = Coordinates::new(-5, 3);
+		let coords3 = Coordinates::new(15, 12);
+
+		assert_eq!(coords1 - coords2, coords3);
+	}
+
+	#[test]
+	fn dir_neg() {
+		assert_eq!(Direction::Left, -Direction::Right);
+		assert_eq!(Direction::Right, -Direction::Left);
+		assert_eq!(Direction::Down, -Direction::Up);
+		assert_eq!(Direction::Up, -Direction::Down);
+	}
+
+	#[test]
+	fn dir_from_str() {
+		assert_eq!(Direction::Up, "up".parse().unwrap());
+		assert_eq!(Direction::Down, "down".parse().unwrap());
+		assert_eq!(Direction::Left, "left".parse().unwrap());
+		assert_eq!(Direction::Right, "right".parse().unwrap());
+	}
+
+	#[test]
+	fn two_values_retain() {
+		let mut vec = vec![1, 2, 3, 4, 5];
+		product_retain(&mut vec, |a, b| a != b);
+		assert_eq!(vec, [1, 2, 3, 4, 5]);
+		
+		let mut vec = vec![1, 2, 2, 3, 4, 5, 4, 1];
+		product_retain(&mut vec, |a, b| a != b);
+		assert_eq!(vec, [2, 3, 5, 4, 1]);
+	}
 }
