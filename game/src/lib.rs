@@ -117,7 +117,7 @@ impl GameData {
                 .unwrap_or(self.settings.snake_direction)
                 .unwrap_or_else(rand::random);
             let length: usize = length.unwrap_or_else(|| self.settings.snake_length.clone().into());
-            let coords = coords.unwrap_or_else(|| self.grid.random_coords(0, None));
+            let coords = coords.unwrap_or_else(|| self.grid.random_coords());
 
             self.snakes
                 .push(Snake::new(name, coords, direction, length));
@@ -160,7 +160,7 @@ impl GameData {
         }
 
         while self.apples.len() < self.apples.capacity() {
-            self.spawn_apple(self.grid.random_coords(0, None), None)?;
+            self.spawn_apple(self.grid.random_coords(), None)?;
         }
 
         Ok(())

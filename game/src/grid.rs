@@ -1,4 +1,8 @@
 //! Game grid abstractions.
+//!
+//! Grid is implemented like a math plot, so (0, 0) point is in the plot's
+//! center, Y-axis is going up from the zero point and X-axis is going right
+//! from the zero point.
 
 use crate::{
     aux::{Color, Coordinates},
@@ -62,7 +66,8 @@ pub struct Grid {
     /// [`Grid`] data itself.
     pub data: Vec<GridPoint>,
 
-    /// [`Grid`] size.
+    /// [`Grid`] size. All values here are inclusive, so if size is 50x50, then
+    /// (50, 50), (50, 49), (49, 50) are all valid points and parts of grid.
     pub size: (usize, usize),
 }
 
@@ -79,21 +84,12 @@ impl Grid {
         }
     }
 
-    /// Generate random coordinates in range from (1 + `offset`) inclusively
-    /// to (grid size - `offset`) exclusively and return them.
-    ///
-    /// `rng` is a random number generator, if it's `None`, then it's
-    /// initialized automatically. This argument may be used if you have
-    /// `rng` already initialized and you don't want to initialize it again.
-    ///
-    /// # Panic
-    /// Panic if offset is less than any of grid sizes.
-    pub fn random_coords(&self, offset: i32, rng: Option<rand::prelude::ThreadRng>) -> Coordinates {
-        assert!(offset < self.size.0 as i32 && offset < self.size.1 as i32);
-        let mut rng = rng.unwrap_or_default();
+    /// Generate random coordinates framed by grid.
+    pub fn random_coords(&self) -> Coordinates {
+		let mut rng = rand::thread_rng();
         Coordinates::new(
-            rng.gen_range(1 + offset..=self.size.0 as i32 - offset) as i32,
-            rng.gen_range(1 + offset..=self.size.1 as i32 - offset) as i32,
+            rng.gen_range(1..=self.size.0) as i32,
+            rng.gen_range(1..=self.size.1) as i32,
         )
     }
 
@@ -128,4 +124,17 @@ impl fmt::Display for Grid {
         }
         Ok(())
     }
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	
+	#[test]
+	fn random_coords() {
+		let size = (10, 10);
+		let grid = Grid::new(size);
+		let rc = grid.random_coords();
+		assert!(rc.x > 0 && rc.x <= size.0 as i32 && rc.y > 0 && rc.y <= size.1 as i32);
+	}
 }
