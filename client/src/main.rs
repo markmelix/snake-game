@@ -37,6 +37,7 @@ fn main() {
     let make_connection = matches.is_present("connect");
 
     let app = GuiApp::new(client_name, server_address, make_connection);
+
     let native_options = eframe::NativeOptions::default();
 
     eframe::run_native(Box::new(app), native_options);
@@ -187,11 +188,11 @@ impl epi::App for GuiApp {
                 ui.label(self.connection_status.clone());
             });
         } else {
-			let mut grid = self.request_grid();
-			while grid.is_err() {
-				grid = self.request_grid();
-			}
-			self.grid = Some(grid.unwrap());
+            let mut grid = self.request_grid();
+            while grid.is_err() {
+                grid = self.request_grid();
+            }
+            self.grid = Some(grid.unwrap());
 
             egui::CentralPanel::default().show(ctx, |ui| {
                 let grid = self.grid.clone().unwrap();

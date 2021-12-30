@@ -195,3 +195,19 @@ impl fmt::Display for Color {
         write!(f, "({}, {}, {}, {})", self.r, self.g, self.b, self.a)
     }
 }
+
+pub(crate) fn product_retain<T, F>(v: &mut Vec<T>, mut pred: F)
+    where F: FnMut(&T, &T) -> bool
+{
+    let mut j = 0;
+    for i in 0..v.len() {
+        // invariants:
+        // items v[0..j] will be kept
+        // items v[j..i] will be removed
+        if (0..j).chain(i + 1..v.len()).all(|a| pred(&v[i], &v[a])) {
+            v.swap(i, j);
+            j += 1;
+        }
+    }
+    v.truncate(j);
+}

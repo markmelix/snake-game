@@ -59,6 +59,16 @@ impl GameData {
 			};
 			!kill
 		});
+		aux::product_retain(&mut self.snakes, |s1, s2| {
+			for s1_part in &s1.parts {
+				for s2_part in &s2.parts {
+					if s1_part.coords() == s2_part.coords() {
+						return false;
+					}
+				}
+			}
+			true
+		});
     }
 
     /// Refill [`game grid`](Grid) with a new data and move all snakes.
