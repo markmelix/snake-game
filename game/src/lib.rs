@@ -50,34 +50,43 @@ impl GameData {
 
 	/// Kill over-bounded or bumped snakes.
 	pub fn kill_dead_snakes(&mut self) {
-		let mut kill_queue = Vec::with_capacity(self.snakes());
+		let kill_queue = self.snakes_to_kill();
+		self.snakes
+			.retain(|snake| !kill_queue.contains(&snake.name));
+	}
+
+	/// Return vector of snake names to be killed.
+	///
+	/// Snake will be in that vector if it's over-bounded or bumped with other
+	/// snake.
+	fn snakes_to_kill(&self) -> Vec<String> {
+		let mut queue = Vec::with_capacity(self.snakes());
 		for snake in &self.snakes {
 			if snake.parts_bumped().unwrap_or(true) || {
 				let (w, h) = (self.grid.size.0 as i32, self.grid.size.1 as i32);
 				let (x, y): (i32, i32) = snake.lp().unwrap().coords().into();
 
-				x < 1 || x > w || y < 1 || y > h
+				x < 0 || x > w || y < 1 || y > h
 			} {
-				kill_queue.push(snake.name());
+				queue.push(snake.name());
 			}
 		}
 		for perm in self.snakes.iter().permutations(2) {
 			let (s1, s2) = (perm[0], perm[1]);
 			if s1.name == s2.name
-				|| kill_queue.contains(&s1.name)
-				|| kill_queue.contains(&s2.name)
+				|| queue.contains(&s1.name)
+				|| queue.contains(&s2.name)
 			{
 				continue;
 			}
 			let s1_lp_coords = s1.lp().unwrap().coords();
 			for s2_part in &s2.parts {
 				if s1_lp_coords == s2_part.coords() {
-					kill_queue.push(s1.name());
+					queue.push(s1.name());
 				}
 			}
 		}
-		self.snakes
-			.retain(|snake| !kill_queue.contains(&snake.name));
+		queue
 	}
 
 	/// Refill [`game grid`](Grid) with a new data and move all snakes.
