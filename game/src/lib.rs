@@ -58,23 +58,26 @@ impl GameData {
 
 				x < 1 || x > w || y < 1 || y > h
 			} {
-				kill_queue.push(snake.name());				
+				kill_queue.push(snake.name());
 			}
 		}
 		for perm in self.snakes.iter().permutations(2) {
 			let (s1, s2) = (perm[0], perm[1]);
-			if s1.name == s2.name || kill_queue.contains(&s1.name) || kill_queue.contains(&s2.name) {
+			if s1.name == s2.name
+				|| kill_queue.contains(&s1.name)
+				|| kill_queue.contains(&s2.name)
+			{
 				continue;
 			}
 			let s1_lp_coords = s1.lp().unwrap().coords();
-		        for s2_part in &s2.parts {
-					println!("{}: {}; {}: {}", s1.name(), s1_lp_coords, s2.name(), s2_part.coords());
-		            if s1_lp_coords == s2_part.coords() {
-		                kill_queue.push(s1.name());
-		            }
-		        }
+			for s2_part in &s2.parts {
+				if s1_lp_coords == s2_part.coords() {
+					kill_queue.push(s1.name());
+				}
+			}
 		}
-		self.snakes.retain(|snake| !kill_queue.contains(&snake.name));
+		self.snakes
+			.retain(|snake| !kill_queue.contains(&snake.name));
 	}
 
 	/// Refill [`game grid`](Grid) with a new data and move all snakes.
@@ -345,7 +348,7 @@ pub mod tests {
 		assert!(!gd.find_snake('1'), "snake 1 should be dead");
 		assert!(!gd.find_snake('2'), "snake 2 should be dead");
 		assert!(!gd.find_snake('3'), "snake 3 should be dead");
-		assert!(!gd.find_snake('4'), "snake 4 should be dead");
+		assert!(gd.find_snake('4'), "snake 4 shouldn't be dead");
 
 		Ok(())
 	}

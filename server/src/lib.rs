@@ -117,13 +117,13 @@ use game::prelude::*;
 use logger::*;
 use serde::{Deserialize, Serialize};
 use std::{
-    error,
-    fmt::{self, Debug},
-    io::{self, Read, Write},
-    net::{TcpListener, TcpStream, ToSocketAddrs},
-    sync::{Arc, Mutex},
-    thread,
-    time::Duration,
+	error,
+	fmt::{self, Debug},
+	io::{self, Read, Write},
+	net::{TcpListener, TcpStream, ToSocketAddrs},
+	sync::{Arc, Mutex},
+	thread,
+	time::Duration,
 };
 
 /// How many bytes one character is.
@@ -145,535 +145,551 @@ pub const GAME_DELAY: Duration = Duration::from_millis(70);
 
 /// Trait which should be implemented for client abstractions.
 pub trait Client {
-    /// Connect to the server with specified address. `client` is a name of the
-    /// snake. Return stream and client name taken from server connection response.
-    fn connect<A: ToSocketAddrs + Debug>(&mut self, address: A) -> Result<()> {
-        match TcpStream::connect(&address) {
-            Ok(stream) => {
-                stream.set_read_timeout(CLIENT_READ_TIMEOUT)?;
-                self.set_stream(Some(stream));
-                Request::new(self.id().unwrap(), RequestKind::Connect)
-                    .write(self.stream().unwrap())
-                    .expect("writing to the server stream");
+	/// Connect to the server with specified address. `client` is a name of the
+	/// snake. Return stream and client name taken from server connection response.
+	fn connect<A: ToSocketAddrs + Debug>(&mut self, address: A) -> Result<()> {
+		match TcpStream::connect(&address) {
+			Ok(stream) => {
+				stream.set_read_timeout(CLIENT_READ_TIMEOUT)?;
+				self.set_stream(Some(stream));
+				Request::new(self.id().unwrap(), RequestKind::Connect)
+					.write(self.stream().unwrap())
+					.expect("writing to the server stream");
 
-                self.read_client_id()?;
+				self.read_client_id()?;
 
-                Ok(())
-            }
-            Err(e) => Err(Box::new(e)),
-        }
-    }
+				Ok(())
+			}
+			Err(e) => Err(Box::new(e)),
+		}
+	}
 
-    /// Parse client id after reading stream after connection request.
-    ///
-    /// This function should be used to parse returned by server client's id
-    /// value after connection request.
-    fn read_client_id(&mut self) -> Result<()> {
-        let mut buffer = [0; CLIENT_ID_LIMIT];
-        self.stream().unwrap().read(&mut buffer).unwrap();
+	/// Parse client id after reading stream after connection request.
+	///
+	/// This function should be used to parse returned by server client's id
+	/// value after connection request.
+	fn read_client_id(&mut self) -> Result<()> {
+		let mut buffer = [0; CLIENT_ID_LIMIT];
+		self.stream().unwrap().read(&mut buffer).unwrap();
 
-        let name = String::from_utf8_lossy(&buffer);
-        let trim_pattern: &[_] = &[char::from(0), '"'];
+		let name = String::from_utf8_lossy(&buffer);
+		let trim_pattern: &[_] = &[char::from(0), '"'];
 
-        self.set_id(Some(name.trim_matches(trim_pattern).to_string()));
+		self.set_id(Some(name.trim_matches(trim_pattern).to_string()));
 
-        Ok(())
-    }
+		Ok(())
+	}
 
-    /// Send request to get game grid to server's stream, read for it and return
-    /// read value.
-    fn request_grid(&mut self) -> Result<Grid> {
-        let id = self.id().unwrap();
-        let stream = self.stream().unwrap();
+	/// Send request to get game grid to server's stream, read for it and return
+	/// read value.
+	fn request_grid(&mut self) -> Result<Grid> {
+		let id = self.id().unwrap();
+		let stream = self.stream().unwrap();
 
-        Request::new(id.clone(), RequestKind::GetGrid).write(stream)?;
+		Request::new(id.clone(), RequestKind::GetGrid).write(stream)?;
 
-        let mut buffer = [0; READ_LIMIT];
+		let mut buffer = [0; READ_LIMIT];
 
-        while let Err(e) = stream.read(&mut buffer) {
-            // WouldBlock error returned if there's read timeout. There may be
-            // read timeout if both server and client are reading, so we must
-            // force someone (in our case, client) break infinitive waiting.
-            // Thus, we handle this timeout error to handle this waiting and
-            // repeat requesting, otherwise we return error not related to
-            // reading timeout.
-            if let io::ErrorKind::WouldBlock = e.kind() {
-                buffer = [0; READ_LIMIT];
-                Request::new(id.clone(), RequestKind::GetGrid).write(stream)?;
-            } else {
-                return Err(Box::new(e));
-            }
-        }
+		while let Err(e) = stream.read(&mut buffer) {
+			// WouldBlock error returned if there's read timeout. There may be
+			// read timeout if both server and client are reading, so we must
+			// force someone (in our case, client) break infinitive waiting.
+			// Thus, we handle this timeout error to handle this waiting and
+			// repeat requesting, otherwise we return error not related to
+			// reading timeout.
+			if let io::ErrorKind::WouldBlock = e.kind() {
+				buffer = [0; READ_LIMIT];
+				Request::new(id.clone(), RequestKind::GetGrid).write(stream)?;
+			} else {
+				return Err(Box::new(e));
+			}
+		}
 
-        let string = String::from_utf8_lossy(&buffer);
+		let string = String::from_utf8_lossy(&buffer);
 
-        Grid::from_string(&string.trim_matches(char::from(0)))
-    }
+		Grid::from_string(&string.trim_matches(char::from(0)))
+	}
 
-    /// Send request to disconnect from the server.
-    fn disconnect(&mut self) -> Result<()> {
-        let id = self.id().unwrap();
-        let stream = self.stream().unwrap();
+	/// Send request to disconnect from the server.
+	fn disconnect(&mut self) -> Result<()> {
+		let id = self.id().unwrap();
+		let stream = self.stream().unwrap();
 
-        Request::new(id, RequestKind::Disconnect).write(stream)?;
+		Request::new(id, RequestKind::Disconnect).write(stream)?;
 
-        stream.flush()?;
+		stream.flush()?;
 
-        Ok(())
-    }
+		Ok(())
+	}
 
-    /// Send request to change snake's direction.
-    fn change_direction(&mut self, direction: Direction) -> Result<()> {
-        Request::new(self.id().unwrap(), RequestKind::ChangeDirection(direction))
-            .write(self.stream().unwrap())?;
-        Ok(())
-    }
+	/// Send request to change snake's direction.
+	fn change_direction(&mut self, direction: Direction) -> Result<()> {
+		Request::new(
+			self.id().unwrap(),
+			RequestKind::ChangeDirection(direction),
+		)
+		.write(self.stream().unwrap())?;
+		Ok(())
+	}
 
-    /// Set client's stream.
-    fn set_stream(&mut self, stream: Option<TcpStream>);
+	/// Set client's stream.
+	fn set_stream(&mut self, stream: Option<TcpStream>);
 
-    /// Return mutable reference to [`server stream`](TcpStream).
-    fn stream(&mut self) -> Option<&mut TcpStream>;
+	/// Return mutable reference to [`server stream`](TcpStream).
+	fn stream(&mut self) -> Option<&mut TcpStream>;
 
-    /// Return cloned [`server stream`](TcpStream).
-    fn stream_clone(&self) -> Option<TcpStream>;
+	/// Return cloned [`server stream`](TcpStream).
+	fn stream_clone(&self) -> Option<TcpStream>;
 
-    /// Set client's identifier.
-    fn set_id(&mut self, id: Option<String>);
+	/// Set client's identifier.
+	fn set_id(&mut self, id: Option<String>);
 
-    /// Return client's identifier.
-    fn id(&self) -> Option<String>;
+	/// Return client's identifier.
+	fn id(&self) -> Option<String>;
 }
 
 /// Run server with specified address and [`GameData`].
 /// `delay` is a delay between every response, it may be used to slow down the
 /// game. If `delay` is none, `GAME_DELAY` value is used.
 pub fn run<A: ToSocketAddrs>(
-    address: A,
-    gamedata: GameData,
-    game_delay: Option<Duration>,
+	address: A,
+	gamedata: GameData,
+	game_delay: Option<Duration>,
 ) -> Result<()> {
-    let listener = TcpListener::bind(address)?;
-    let gamedata = Arc::new(Mutex::new(gamedata));
-    let game_delay = game_delay.map_or(GAME_DELAY, |d| d);
+	let listener = TcpListener::bind(address)?;
+	let gamedata = Arc::new(Mutex::new(gamedata));
+	let game_delay = game_delay.map_or(GAME_DELAY, |d| d);
 
-    // Update GameData in a separate thread
-    let gamedata_clone = gamedata.clone();
-    thread::Builder::new()
-        .name("GameData handler".into())
-        .spawn(move || {
-            let gamedata = || gamedata_clone.lock().expect("acquiring mutex lock");
-            loop {
-                gamedata().kill_dead_snakes();
-                gamedata().check_apples().expect("checking apples");
-                gamedata().update_grid().expect("updating game grid");
-                thread::sleep(game_delay);
-            }
-        })?;
+	// Update GameData in a separate thread
+	let gamedata_clone = gamedata.clone();
+	thread::Builder::new()
+		.name("GameData handler".into())
+		.spawn(move || {
+			let gamedata =
+				|| gamedata_clone.lock().expect("acquiring mutex lock");
+			loop {
+				gamedata().kill_dead_snakes();
+				gamedata().check_apples().expect("checking apples");
+				gamedata().update_grid().expect("updating game grid");
+				thread::sleep(game_delay);
+			}
+		})?;
 
-    // Start handling connections
-    loop {
-        let (socket, address) = match listener.accept() {
-            Ok(val) => val,
-            Err(e) => {
-                error!("Failed to accept incoming connection: {}", e);
-                continue;
-            }
-        };
-        // Handle client in a separate thread
-        let gamedata = gamedata.clone();
-        thread::Builder::new()
-            .name(format!("{}'s handler", address))
-            .spawn(move || match handle_client(socket, gamedata) {
-                Ok(_) => info!("Successfully handled client {}", address),
-                Err(e) => error!("Failed to handle client \"{}\": {}", address, e),
-            })?;
-    }
+	// Start handling connections
+	loop {
+		let (socket, address) = match listener.accept() {
+			Ok(val) => val,
+			Err(e) => {
+				error!("Failed to accept incoming connection: {}", e);
+				continue;
+			}
+		};
+		// Handle client in a separate thread
+		let gamedata = gamedata.clone();
+		thread::Builder::new()
+			.name(format!("{}'s handler", address))
+			.spawn(move || match handle_client(socket, gamedata) {
+				Ok(_) => info!("Successfully handled client {}", address),
+				Err(e) => {
+					error!("Failed to handle client \"{}\": {}", address, e)
+				}
+			})?;
+	}
 }
 
 /// Handle client connected to server.
 /// `delay` is a delay between every request, it may be used to slow down the
 /// game.
-fn handle_client(stream: TcpStream, gamedata: Arc<Mutex<GameData>>) -> Result<()> {
-    let mut session = Session::new(stream, gamedata.clone());
+fn handle_client(
+	stream: TcpStream,
+	gamedata: Arc<Mutex<GameData>>,
+) -> Result<()> {
+	let mut session = Session::new(stream, gamedata.clone());
 
-    loop {
-        if session.wait().is_err() {
-            continue;
-        }
+	loop {
+		if session.wait().is_err() {
+			continue;
+		}
 
-        if let Err(e) = session.handle_requests() {
-            debug!(
-                "{:?} {} - discard handling",
-                session.client().unwrap_or_default(),
-                e
-            );
-            session.discard_exchanges();
-        }
+		if let Err(e) = session.handle_requests() {
+			debug!(
+				"{:?} {} - discard handling",
+				session.client().unwrap_or_default(),
+				e
+			);
+			session.discard_exchanges();
+		}
 
-        if session.is_disconnected() {
-            break;
-        }
-    }
+		if session.is_disconnected() {
+			break;
+		}
+	}
 
-    let mut gamedata = gamedata.lock().expect("acquiring gamedata mutex");
+	let mut gamedata = gamedata.lock().expect("acquiring gamedata mutex");
 
-    if let Some(exchange) = session.exchanges().first() {
-        let name = exchange.request().client;
-        if gamedata.find_snake(&name) {
-            gamedata.kill_snake(name)?;
-        }
-    }
+	if let Some(exchange) = session.exchanges().first() {
+		let name = exchange.request().client;
+		if gamedata.find_snake(&name) {
+			gamedata.kill_snake(name)?;
+		}
+	}
 
-    Ok(())
+	Ok(())
 }
 
 /// Struct which represents responses stack with some connection-handling data
 /// and server stream.
 struct Session {
-    /// Server stream.
-    stream: TcpStream,
+	/// Server stream.
+	stream: TcpStream,
 
-    /// Client name.
-    client: Option<String>,
+	/// Client name.
+	client: Option<String>,
 
-    /// GameData.
-    gamedata: Arc<Mutex<GameData>>,
+	/// GameData.
+	gamedata: Arc<Mutex<GameData>>,
 
-    /// Is client connected to server or not.
-    connected: bool,
+	/// Is client connected to server or not.
+	connected: bool,
 
-    /// `exchanges` is just a vector of server requests linked with responses.
-    exchanges: Vec<Exchange>,
+	/// `exchanges` is just a vector of server requests linked with responses.
+	exchanges: Vec<Exchange>,
 }
 
 impl Session {
-    /// Return a new empty [`Session`].
-    fn new(stream: TcpStream, gamedata: Arc<Mutex<GameData>>) -> Self {
-        Self {
-            stream,
-            gamedata,
-            client: None,
-            connected: false,
-            exchanges: vec![],
-        }
-    }
+	/// Return a new empty [`Session`].
+	fn new(stream: TcpStream, gamedata: Arc<Mutex<GameData>>) -> Self {
+		Self {
+			stream,
+			gamedata,
+			client: None,
+			connected: false,
+			exchanges: vec![],
+		}
+	}
 
-    /// Wait for requests and push them to the stack.
-    fn wait(&mut self) -> Result<()> {
-        let mut buffer = [0; 1024];
+	/// Wait for requests and push them to the stack.
+	fn wait(&mut self) -> Result<()> {
+		let mut buffer = [0; 1024];
 
-        self.stream.read(&mut buffer)?;
+		self.stream.read(&mut buffer)?;
 
-        if String::from_utf8_lossy(&buffer).trim_matches(char::from(0)) == "" {
-            return Err(Box::new(ServerError::EmptyRequestString));
-        }
+		if String::from_utf8_lossy(&buffer).trim_matches(char::from(0)) == "" {
+			return Err(Box::new(ServerError::EmptyRequestString));
+		}
 
-        match Request::from_bytes(&buffer) {
-            Ok(requests) => {
-                for request in requests {
-                    self.exchanges_mut().push(Exchange(request.clone(), None));
-                }
-            }
-            Err(e) => {
-                error!("Failed to convert request: {}", e);
-                return Err(e);
-            }
-        };
+		match Request::from_bytes(&buffer) {
+			Ok(requests) => {
+				for request in requests {
+					self.exchanges_mut().push(Exchange(request.clone(), None));
+				}
+			}
+			Err(e) => {
+				error!("Failed to convert request: {}", e);
+				return Err(e);
+			}
+		};
 
-        Ok(())
-    }
+		Ok(())
+	}
 
-    /// Handle all uncompleted requests.
-    fn handle_requests(&mut self) -> Result<()> {
-        let mut is_connection_request = false;
-        let mut stream = self.stream.try_clone()?;
-        let gamedata = self.gamedata.clone();
-        let last_direction = self
-            .exchanges()
-            .iter()
-            .filter(|exchange| exchange.completed())
-            .map(|exchange| exchange.request().kind)
-            .filter(|kind| matches!(kind, RequestKind::ChangeDirection(_)))
-            .last();
+	/// Handle all uncompleted requests.
+	fn handle_requests(&mut self) -> Result<()> {
+		let mut is_connection_request = false;
+		let mut stream = self.stream.try_clone()?;
+		let gamedata = self.gamedata.clone();
+		let last_direction = self
+			.exchanges()
+			.iter()
+			.filter(|exchange| exchange.completed())
+			.map(|exchange| exchange.request().kind)
+			.filter(|kind| matches!(kind, RequestKind::ChangeDirection(_)))
+			.last();
 
-        if self.exchanges().is_empty() {
-            return Ok(());
-        }
+		if self.exchanges().is_empty() {
+			return Ok(());
+		}
 
-        let first_request = self.exchanges().first().unwrap().request();
-        if !self.connected() && first_request.kind != RequestKind::Connect {
-            return Err(Box::new(ServerError::IsNotConnected));
-        }
+		let first_request = self.exchanges().first().unwrap().request();
+		if !self.connected() && first_request.kind != RequestKind::Connect {
+			return Err(Box::new(ServerError::IsNotConnected));
+		}
 
-        for exchange in self.exchanges_mut() {
-            if exchange.response().is_some() {
-                continue;
-            }
+		for exchange in self.exchanges_mut() {
+			if exchange.response().is_some() {
+				continue;
+			}
 
-            let mut request = exchange.request();
+			let mut request = exchange.request();
 
-            // Lazily acquire gamedata mutex to work with it on a fly without
-            // boilerplate code.
-            let gamedata = || gamedata.lock().expect("acquiring gamedata mutex");
+			// Lazily acquire gamedata mutex to work with it on a fly without
+			// boilerplate code.
+			let gamedata =
+				|| gamedata.lock().expect("acquiring gamedata mutex");
 
-            let response = match request.kind {
-                RequestKind::Connect => {
-                    is_connection_request = true;
-                    let mut name = request.client;
+			let response = match request.kind {
+				RequestKind::Connect => {
+					is_connection_request = true;
+					let mut name = request.client;
 
-                    // Check whether there is already a snake with such name and
-                    // if yes, change it to uniquely-generated one.
-                    if gamedata().find_snake(name.clone()) {
-                        name.push_str(&format!(" ({})", gamedata().snakes()));
-                    }
+					// Check whether there is already a snake with such name and
+					// if yes, change it to uniquely-generated one.
+					if gamedata().find_snake(name.clone()) {
+						name.push_str(&format!(" ({})", gamedata().snakes()));
+					}
 
-                    request.client = name.clone();
+					request.client = name.clone();
 
-                    Response::new(
-                        request.clone(),
-                        gamedata().spawn_snake(name, None, None, None),
-                    )
-                }
-                RequestKind::ChangeDirection(direction) => {
-                    if let Some(RequestKind::ChangeDirection(last_request_direction)) =
-                        last_direction
-                    {
-                        if last_request_direction == direction {
-                            return Err(Box::new(ServerError::IndenticalRequests));
-                        }
-                    }
+					Response::new(
+						request.clone(),
+						gamedata().spawn_snake(name, None, None, None),
+					)
+				}
+				RequestKind::ChangeDirection(direction) => {
+					if let Some(RequestKind::ChangeDirection(
+						last_request_direction,
+					)) = last_direction
+					{
+						if last_request_direction == direction {
+							return Err(Box::new(
+								ServerError::IndenticalRequests,
+							));
+						}
+					}
 
-                    let mut gamedata = gamedata();
-                    let snake = gamedata.snake_mut(request.client.clone());
+					let mut gamedata = gamedata();
+					let snake = gamedata.snake_mut(request.client.clone());
 
-                    match snake {
-                        Ok(snake) => {
-                            Response::new(request.clone(), snake.change_direction(direction))
-                        }
-                        Err(_) => Response::new(request.clone(), snake.map(|_| ())),
-                    }
-                }
-                RequestKind::GetGrid => Response::new(request.clone(), Ok(())),
-                RequestKind::Disconnect => Response::new(
-                    request.clone(),
-                    gamedata().kill_snake(request.client()).map(|_| ()),
-                ),
-            };
+					match snake {
+						Ok(snake) => Response::new(
+							request.clone(),
+							snake.change_direction(direction),
+						),
+						Err(_) => {
+							Response::new(request.clone(), snake.map(|_| ()))
+						}
+					}
+				}
+				RequestKind::GetGrid => Response::new(request.clone(), Ok(())),
+				RequestKind::Disconnect => Response::new(
+					request.clone(),
+					gamedata().kill_snake(request.client()).map(|_| ()),
+				),
+			};
 
-            if request.kind != RequestKind::GetGrid {
-                info!("{}", response);
-            }
+			if request.kind != RequestKind::GetGrid {
+				info!("{}", response);
+			}
 
-            exchange.assign_response(response);
+			exchange.assign_response(response);
 
-            match request.kind {
-                RequestKind::Connect => {
-                    let buffer = serde_json::to_string(&request.client())?;
-                    debug!("Writing name to stream: {}", buffer);
-                    stream.write(buffer.as_bytes())?;
-                }
-                RequestKind::GetGrid => {
-                    let buffer = match gamedata().grid().as_bytes() {
-                        Ok(val) => val,
-                        Err(e) => {
-                            error!("Failed to convert gamedata: {}", e);
-                            return Err(e);
-                        }
-                    };
-                    stream.write(&buffer)?;
-                }
-                RequestKind::Disconnect => break,
-                _ => (),
-            }
-        }
+			match request.kind {
+				RequestKind::Connect => {
+					let buffer = serde_json::to_string(&request.client())?;
+					debug!("Writing name to stream: {}", buffer);
+					stream.write(buffer.as_bytes())?;
+				}
+				RequestKind::GetGrid => {
+					let buffer = match gamedata().grid().as_bytes() {
+						Ok(val) => val,
+						Err(e) => {
+							error!("Failed to convert gamedata: {}", e);
+							return Err(e);
+						}
+					};
+					stream.write(&buffer)?;
+				}
+				RequestKind::Disconnect => break,
+				_ => (),
+			}
+		}
 
-        if !self.connected && is_connection_request {
-            self.connected = true
-        }
+		if !self.connected && is_connection_request {
+			self.connected = true
+		}
 
-        Ok(())
-    }
+		Ok(())
+	}
 
-    /// Return true if some of sent requests have
-    /// [`disconnect kind`](RequestKind::Disconnect).
-    fn is_disconnected(&self) -> bool {
-        for exchange in self.exchanges() {
-            if let RequestKind::Disconnect = exchange.request().kind {
-                return true;
-            }
-        }
-        false
-    }
+	/// Return true if some of sent requests have
+	/// [`disconnect kind`](RequestKind::Disconnect).
+	fn is_disconnected(&self) -> bool {
+		for exchange in self.exchanges() {
+			if let RequestKind::Disconnect = exchange.request().kind {
+				return true;
+			}
+		}
+		false
+	}
 
-    /// Return true if client is connected or false otherwise.
-    fn connected(&self) -> bool {
-        self.connected
-    }
+	/// Return true if client is connected or false otherwise.
+	fn connected(&self) -> bool {
+		self.connected
+	}
 
-    /// Get immutable reference to session's exchange.
-    fn exchanges(&self) -> &Vec<Exchange> {
-        &self.exchanges
-    }
+	/// Get immutable reference to session's exchange.
+	fn exchanges(&self) -> &Vec<Exchange> {
+		&self.exchanges
+	}
 
-    /// Get mutable reference to session's exchange.
-    fn exchanges_mut(&mut self) -> &mut Vec<Exchange> {
-        &mut self.exchanges
-    }
+	/// Get mutable reference to session's exchange.
+	fn exchanges_mut(&mut self) -> &mut Vec<Exchange> {
+		&mut self.exchanges
+	}
 
-    /// Return client name.
-    fn client(&self) -> Option<String> {
-        self.exchanges()
-            .first()
-            .map(|exchange| exchange.request().client())
-    }
+	/// Return client name.
+	fn client(&self) -> Option<String> {
+		self.exchanges()
+			.first()
+			.map(|exchange| exchange.request().client())
+	}
 
-    /// Remove uncompleted exchanges from stack.
-    pub fn discard_exchanges(&mut self) {
-        let mut i = 0;
-        while i < self.exchanges().len() {
-            if !self.exchanges_mut()[i].completed() {
-                self.exchanges_mut().remove(i);
-                i -= 1;
-            }
-            i += 1;
-        }
-    }
+	/// Remove uncompleted exchanges from stack.
+	pub fn discard_exchanges(&mut self) {
+		let mut i = 0;
+		while i < self.exchanges().len() {
+			if !self.exchanges_mut()[i].completed() {
+				self.exchanges_mut().remove(i);
+				i -= 1;
+			}
+			i += 1;
+		}
+	}
 }
 
 /// Server request abstraction.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 struct Request {
-    /// Client identifier.
-    client: String,
-    /// Kind of request to send.
-    kind: RequestKind,
+	/// Client identifier.
+	client: String,
+	/// Kind of request to send.
+	kind: RequestKind,
 }
 
 impl Request {
-    /// Return a new [`Request`]
-    fn new(client: impl Into<String>, kind: RequestKind) -> Self {
-        Self {
-            client: client.into(),
-            kind,
-        }
-    }
+	/// Return a new [`Request`]
+	fn new(client: impl Into<String>, kind: RequestKind) -> Self {
+		Self {
+			client: client.into(),
+			kind,
+		}
+	}
 
-    /// Convert [`Request`] to bytes.
-    fn as_bytes(&self) -> Result<Vec<u8>> {
-        Ok(self.to_string()?.as_bytes().to_vec())
-    }
+	/// Convert [`Request`] to bytes.
+	fn as_bytes(&self) -> Result<Vec<u8>> {
+		Ok(self.to_string()?.as_bytes().to_vec())
+	}
 
-    /// Convert bytes to [`Vec<Request>`].
-    fn from_bytes(b: &[u8]) -> Result<Vec<Self>> {
-        let mut requests = vec![];
-        let string = String::from_utf8_lossy(b);
-        let string = string.trim_matches(char::from(0));
-        let separator = &String::from_utf8_lossy(&[0; 4]).to_string();
-        for slice in string.split(separator) {
-            if !slice.is_empty() {
-                requests.push(Self::from_string(slice)?);
-            }
-        }
-        Ok(requests)
-    }
+	/// Convert bytes to [`Vec<Request>`].
+	fn from_bytes(b: &[u8]) -> Result<Vec<Self>> {
+		let mut requests = vec![];
+		let string = String::from_utf8_lossy(b);
+		let string = string.trim_matches(char::from(0));
+		let separator = &String::from_utf8_lossy(&[0; 4]).to_string();
+		for slice in string.split(separator) {
+			if !slice.is_empty() {
+				requests.push(Self::from_string(slice)?);
+			}
+		}
+		Ok(requests)
+	}
 
-    /// Convert [`Request`] to json string.
-    fn to_string(&self) -> Result<String> {
-        Ok(serde_json::to_string(self)?)
-    }
+	/// Convert [`Request`] to json string.
+	fn to_string(&self) -> Result<String> {
+		Ok(serde_json::to_string(self)?)
+	}
 
-    /// Convert json string to [`Request`].
-    fn from_string<T: AsRef<str>>(string: T) -> Result<Self> {
-        Ok(serde_json::from_str(
-            string.as_ref().trim_matches(char::from(0)),
-        )?)
-    }
+	/// Convert json string to [`Request`].
+	fn from_string<T: AsRef<str>>(string: T) -> Result<Self> {
+		Ok(serde_json::from_str(
+			string.as_ref().trim_matches(char::from(0)),
+		)?)
+	}
 
-    /// Send request to server.
-    ///
-    /// Write request to [`TcpStream`] after writing four null characters to
-    /// make splitting multiple json requests possible.
-    fn write(&self, stream: &mut TcpStream) -> Result<()> {
-        stream.write(&self.as_bytes()?)?;
-        stream.write(&[0; 4])?;
-        Ok(())
-    }
+	/// Send request to server.
+	///
+	/// Write request to [`TcpStream`] after writing four null characters to
+	/// make splitting multiple json requests possible.
+	fn write(&self, stream: &mut TcpStream) -> Result<()> {
+		stream.write(&self.as_bytes()?)?;
+		stream.write(&[0; 4])?;
+		Ok(())
+	}
 
-    /// Return client name.
-    fn client(&self) -> String {
-        self.client.clone()
-    }
+	/// Return client name.
+	fn client(&self) -> String {
+		self.client.clone()
+	}
 }
 
 /// Enum of server request kinds.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum RequestKind {
-    /// Request to connect to server.
-    Connect,
+	/// Request to connect to server.
+	Connect,
 
-    /// Request to disconnect from server.
-    Disconnect,
+	/// Request to disconnect from server.
+	Disconnect,
 
-    /// Request to get game grid.
-    GetGrid,
+	/// Request to get game grid.
+	GetGrid,
 
-    /// Request to change snake direction on the provided one.
-    ChangeDirection(Direction),
+	/// Request to change snake direction on the provided one.
+	ChangeDirection(Direction),
 }
 
 impl fmt::Display for RequestKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Connect => write!(f, "connect to the server"),
-            Self::Disconnect => write!(f, "disconnect from the server"),
-            Self::GetGrid => write!(f, "get game grid"),
-            Self::ChangeDirection(direction) => {
-                write!(f, "change snake direction to {}", direction)
-            }
-        }
-    }
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			Self::Connect => write!(f, "connect to the server"),
+			Self::Disconnect => write!(f, "disconnect from the server"),
+			Self::GetGrid => write!(f, "get game grid"),
+			Self::ChangeDirection(direction) => {
+				write!(f, "change snake direction to {}", direction)
+			}
+		}
+	}
 }
 
 /// Server response abstraction.
 #[derive(Debug)]
 struct Response {
-    /// [`Request`] to answer.
-    request: Request,
+	/// [`Request`] to answer.
+	request: Request,
 
-    /// Result of some game function.
-    response: Result<()>,
+	/// Result of some game function.
+	response: Result<()>,
 }
 
 impl Response {
-    /// Return new [`Response`].
-    fn new(request: Request, response: Result<()>) -> Self {
-        Self { request, response }
-    }
+	/// Return new [`Response`].
+	fn new(request: Request, response: Result<()>) -> Self {
+		Self { request, response }
+	}
 
-    /// Return [`Request`] linked to this response.
-    fn request(&self) -> Request {
-        self.request.clone()
-    }
+	/// Return [`Request`] linked to this response.
+	fn request(&self) -> Request {
+		self.request.clone()
+	}
 }
 
 impl fmt::Display for Response {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.response {
-            Ok(_) => write!(
-                f,
-                "{}'s request to {} is successful",
-                self.request.client, self.request.kind
-            ),
-            Err(e) => write!(
-                f,
-                "{}'s request to {} is failed because {}",
-                self.request.client, self.request.kind, e
-            ),
-        }
-    }
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match &self.response {
+			Ok(_) => write!(
+				f,
+				"{}'s request to {} is successful",
+				self.request.client, self.request.kind
+			),
+			Err(e) => write!(
+				f,
+				"{}'s request to {} is failed because {}",
+				self.request.client, self.request.kind, e
+			),
+		}
+	}
 }
 
 /// Struct representing request with possibly likned response.
@@ -681,66 +697,70 @@ impl fmt::Display for Response {
 struct Exchange(Request, Option<Response>);
 
 impl Exchange {
-    /// Return linked request.
-    fn request(&self) -> Request {
-        self.0.clone()
-    }
+	/// Return linked request.
+	fn request(&self) -> Request {
+		self.0.clone()
+	}
 
-    /// Return possibly linked response.
-    fn response(&self) -> &Option<Response> {
-        &self.1
-    }
+	/// Return possibly linked response.
+	fn response(&self) -> &Option<Response> {
+		&self.1
+	}
 
-    /// Assign response to the exchange.
-    fn assign_response(&mut self, response: Response) {
-        self.set_response(Some(response));
-    }
+	/// Assign response to the exchange.
+	fn assign_response(&mut self, response: Response) {
+		self.set_response(Some(response));
+	}
 
-    /// Unlink response from the exchange.
-    fn unlink_response(&mut self) {
-        self.set_response(None);
-    }
+	/// Unlink response from the exchange.
+	fn unlink_response(&mut self) {
+		self.set_response(None);
+	}
 
-    /// Set exchange response. Shouldn't be used directly, use
-    /// [`assign_response`](Self::assign_response) or
-    /// [`unlink_response`](Self::unlink_response) instead.
-    fn set_response(&mut self, response: Option<Response>) {
-        self.1 = response
-    }
+	/// Set exchange response. Shouldn't be used directly, use
+	/// [`assign_response`](Self::assign_response) or
+	/// [`unlink_response`](Self::unlink_response) instead.
+	fn set_response(&mut self, response: Option<Response>) {
+		self.1 = response
+	}
 
-    /// Return true if there's a response assigned to that exchange.
-    fn completed(&self) -> bool {
-        self.1.is_some()
-    }
+	/// Return true if there's a response assigned to that exchange.
+	fn completed(&self) -> bool {
+		self.1.is_some()
+	}
 }
 
 /// Error type returned by crate's functions.
 #[derive(Debug, Clone)]
 pub enum ServerError {
-    /// Client is trying to be handled without being authorized.
-    ///
-    /// Every client should send connection request before being handled to be
-    /// authorized by server.
-    IsNotConnected,
+	/// Client is trying to be handled without being authorized.
+	///
+	/// Every client should send connection request before being handled to be
+	/// authorized by server.
+	IsNotConnected,
 
-    /// Client is sending nothing besides null characters.
-    EmptyRequestString,
+	/// Client is sending nothing besides null characters.
+	EmptyRequestString,
 
-    /// Client sent two indentical requests. Requests to get some information
-    /// are exceptions.
-    IndenticalRequests,
+	/// Client sent two indentical requests. Requests to get some information
+	/// are exceptions.
+	IndenticalRequests,
 }
 
 impl fmt::Display for ServerError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::IsNotConnected => {
-                write!(f, "client wants to be handled without being authorized")
-            }
-            Self::EmptyRequestString => write!(f, "client sent nothing besides null chars"),
-            Self::IndenticalRequests => write!(f, "client sent two indentical requests"),
-        }
-    }
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			Self::IsNotConnected => {
+				write!(f, "client wants to be handled without being authorized")
+			}
+			Self::EmptyRequestString => {
+				write!(f, "client sent nothing besides null chars")
+			}
+			Self::IndenticalRequests => {
+				write!(f, "client sent two indentical requests")
+			}
+		}
+	}
 }
 
 impl error::Error for ServerError {}
