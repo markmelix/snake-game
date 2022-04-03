@@ -91,9 +91,8 @@ impl Snake {
         let parts = &mut self.parts;
 
         for i in 0..parts.len() {
-            let coords;
-            match parts.get_mut(i + 1) {
-                Some(next_part) => coords = Some(next_part.coords()),
+            let coords = match parts.get_mut(i + 1) {
+                Some(next_part) => Some(next_part.coords()),
                 None => break,
             };
             parts[i].set_coords(coords.unwrap());
@@ -103,9 +102,9 @@ impl Snake {
         Ok(())
     }
 
-    /// Check does some snake parts bumped the leading one or not.
+    /// Check did some snake parts bump the leading one or not.
     ///
-    /// Return `true`, if they does, or `false`, if doesn't.
+    /// Return `true`, if they did, or `false`, if they didn't.
     pub(crate) fn parts_bumped(&self) -> Result<bool> {
         let lp = self.lp();
         if lp.is_none() {
@@ -202,6 +201,18 @@ impl Snake {
     pub(crate) fn name(&self) -> String {
         self.name.clone()
     }
+}
+
+/// Bump snake leading part with other ones. Needed for testing purposes.
+#[allow(dead_code)]
+pub(crate) fn bump_parts(snake: &mut Snake) -> Result<()> {
+    snake.change_direction(Direction::Up)?;
+    snake.move_parts(1)?;
+    snake.change_direction(Direction::Left)?;
+    snake.move_parts(1)?;
+    snake.change_direction(Direction::Down)?;
+    snake.move_parts(1)?;
+    Ok(())
 }
 
 /// Snake initial length abstraction.
@@ -333,8 +344,8 @@ mod tests {
     use super::*;
 
     mod snake {
-		use super::*;
-		
+        use super::*;
+
         #[test]
         fn new() {
             let snake = Snake::new("snake", (0, 0).into(), Direction::Right, 5);
@@ -430,15 +441,8 @@ mod tests {
         fn parts_bumped() -> Result<()> {
             let mut snake = new_snake(Direction::Right, 5);
 
-            assert!(!snake.parts_bumped().unwrap());
-
-            snake.change_direction(Direction::Up)?;
-            snake.move_parts(1)?;
-            snake.change_direction(Direction::Left)?;
-            snake.move_parts(1)?;
-            snake.change_direction(Direction::Down)?;
-            snake.move_parts(1)?;
-
+            assert!(!snake.parts_bumped()?);
+            bump_parts(&mut snake)?;
             assert!(snake.parts_bumped()?);
 
             Ok(())
@@ -543,8 +547,8 @@ mod tests {
     }
 
     mod snake_length {
-		use super::*;
-		
+        use super::*;
+
         #[test]
         fn snake_length() {
             assert_eq!(SnakeLength::Fixed(10).get(), 10);
@@ -573,8 +577,8 @@ mod tests {
     }
 
     mod snake_part {
-		use super::*;
-		
+        use super::*;
+
         #[test]
         fn mv() {
             let mut part = SnakePart::new(Coordinates::new(3, 4), Color::BLACK);

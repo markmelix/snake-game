@@ -226,23 +226,6 @@ impl fmt::Display for Color {
     }
 }
 
-/// Like [`Vec::retain`], but retain between two values.
-pub(crate) fn product_retain<T, F>(v: &mut Vec<T>, mut pred: F)
-    where F: FnMut(&T, &T) -> bool
-{
-    let mut j = 0;
-    for i in 0..v.len() {
-        // invariants:
-        // items v[0..j] will be kept
-        // items v[j..i] will be removed
-        if (0..j).chain(i + 1..v.len()).all(|a| pred(&v[i], &v[a])) {
-            v.swap(i, j);
-            j += 1;
-        }
-    }
-    v.truncate(j);
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -279,16 +262,5 @@ mod tests {
 		assert_eq!(Direction::Down, "down".parse().unwrap());
 		assert_eq!(Direction::Left, "left".parse().unwrap());
 		assert_eq!(Direction::Right, "right".parse().unwrap());
-	}
-
-	#[test]
-	fn two_values_retain() {
-		let mut vec = vec![1, 2, 3, 4, 5];
-		product_retain(&mut vec, |a, b| a != b);
-		assert_eq!(vec, [1, 2, 3, 4, 5]);
-		
-		let mut vec = vec![1, 2, 2, 3, 4, 5, 4, 1];
-		product_retain(&mut vec, |a, b| a != b);
-		assert_eq!(vec, [2, 3, 5, 4, 1]);
 	}
 }
