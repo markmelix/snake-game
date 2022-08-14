@@ -313,9 +313,8 @@ fn handle_client(
 
 		if let Err(e) = session.handle_requests() {
 			debug!(
-				"{:?} {} - discard handling",
-				session.client().unwrap_or_default(),
-				e
+				"{:?} {e} - discard handling",
+				session.client().unwrap_or_default()
 			);
 			session.discard_exchanges();
 		}
@@ -477,16 +476,11 @@ impl Session {
 				),
 			};
 
-			if request.kind != RequestKind::GetGrid {
-				info!("{}", response);
-			}
-
 			exchange.assign_response(response);
 
 			match request.kind {
 				RequestKind::Connect => {
 					let buffer = serde_json::to_string(&request.client())?;
-					debug!("Writing name to stream: {}", buffer);
 					stream.write(buffer.as_bytes())?;
 				}
 				RequestKind::GetGrid => {
